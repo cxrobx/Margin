@@ -2,13 +2,13 @@
 // Its fixed viewport clips motion at this display's edge, including when a
 // second monitor sits beside it. Desktop blur stays active during motion; the native shadow returns on arrival.
 export class PanelMotion {
-  constructor(win, { reducedMotion, hidden, material }) {
-    this.material = material; this.win = win; this.reducedMotion = reducedMotion; this.hidden = hidden;
+  constructor(win, { reducedMotion, hidden, material, focus }) {
+    this.material = material; this.focus = focus; this.win = win; this.reducedMotion = reducedMotion; this.hidden = hidden;
     this.visible = false; this.phase = 'closed'; this.id = 0;
   }
   request(visible, edge) {
     if (visible === this.visible && this.phase !== 'closed') {
-      if (visible && this.win.isVisible()) this.win.focus();
+      if (visible && this.win.isVisible()) { this.focus?.activate(); this.win.focus(); }
       return;
     }
     if (!visible && this.phase === 'closed') return;
@@ -29,7 +29,7 @@ export class PanelMotion {
   ready(id) {
     if (id !== this.id || this.phase !== 'preparing') return;
     this.phase = this.visible ? 'opening' : 'closing';
-    if (this.visible) { this.win.show(); this.win.focus(); }
+    if (this.visible) { this.focus?.activate(); this.win.show(); this.win.focus(); }
     this.material.resume();
     this.win.webContents.send('panel:motion-start', id);
   }
@@ -40,7 +40,7 @@ export class PanelMotion {
     if (this.visible) {
       this.win.show(); this.phase = 'open';
     } else {
-      this.phase = 'closed'; this.win.hide(); this.hidden();
+      this.phase = 'closed'; this.win.hide(); this.focus?.restore(); this.hidden();
     }
     this.win.setHasShadow(true);
     if (this.visible) this.material.resume(); else this.material.suspend();

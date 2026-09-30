@@ -1,5 +1,7 @@
 // WindowServer blur for this app's own window, matching CXTasks. Dynamic
 // lookup keeps unavailable symbols a cosmetic fallback instead of a crash.
+// Also app activation: the panel is non-activating, so without it the Edit
+// menu shortcuts (⌘V, ⌘C, ⌘Z) go to whichever app was active before.
 #import <AppKit/AppKit.h>
 #include <node_api.h>
 #include <dlfcn.h>
@@ -46,11 +48,38 @@ static napi_value Configure(napi_env env, napi_callback_info info) {
   }
   napi_value value; napi_create_int32(env, result, &value); return value;
 }
+static napi_value Pid(napi_env env, int32_t pid) {
+  napi_value value; napi_create_int32(env, pid, &value); return value;
+}
+// The app to hand focus back to, or 0 when this app is already frontmost.
+static napi_value Frontmost(napi_env env, napi_callback_info info) {
+  NSRunningApplication* front = [[NSWorkspace sharedWorkspace] frontmostApplication];
+  pid_t self = [[NSProcessInfo processInfo] processIdentifier];
+  return Pid(env, front && [front processIdentifier] != self ? [front processIdentifier] : 0);
+}
+static napi_value Activate(napi_env env, napi_callback_info info) {
+  [NSApp activateIgnoringOtherApps:YES];
+  napi_value value; napi_get_boolean(env, true, &value); return value;
+}
+// Only while this app is still active: an app the user clicked into keeps focus.
+static napi_value Restore(napi_env env, napi_callback_info info) {
+  size_t argc = 1; napi_value args[1]; int32_t pid = 0;
+  napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+  bool restored = false;
+  if (argc == 1 && napi_get_value_int32(env, args[0], &pid) == napi_ok && pid > 0 && [NSApp isActive]) {
+    NSRunningApplication* previous = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
+    if (previous && ![previous isTerminated]) restored = [previous activateWithOptions:0];
+  }
+  napi_value value; napi_get_boolean(env, restored, &value); return value;
+}
 static napi_value Init(napi_env env, napi_value exports) {
   napi_property_descriptor properties[] = {
     { "available", nullptr, Available, nullptr, nullptr, nullptr, napi_default, nullptr },
-    { "configure", nullptr, Configure, nullptr, nullptr, nullptr, napi_default, nullptr }
+    { "configure", nullptr, Configure, nullptr, nullptr, nullptr, napi_default, nullptr },
+    { "frontmost", nullptr, Frontmost, nullptr, nullptr, nullptr, napi_default, nullptr },
+    { "activate", nullptr, Activate, nullptr, nullptr, nullptr, napi_default, nullptr },
+    { "restore", nullptr, Restore, nullptr, nullptr, nullptr, napi_default, nullptr }
   };
-  napi_define_properties(env, exports, 2, properties); return exports;
+  napi_define_properties(env, exports, 5, properties); return exports;
 }
 NAPI_MODULE(NODE_GYP_MODULE_NAME, Init)

@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PanelMotion } from '../app/panel-motion.mjs';
 import { WindowMaterial } from '../app/window-material.mjs';
+import { AppFocus } from '../app/app-focus.mjs';
 import { GLASS_THEME, glassAlphas } from '../shared/themes.mjs';
 
-function fixture({ available = true, reducedTransparency = false, reducedMotion = false, failBlur = false } = {}) {
+function fixture({ available = true, reducedTransparency = false, reducedMotion = false, failBlur = false, focus } = {}) {
   const calls = [], messages = [];
   let visible = false, material;
   const win = {
@@ -24,7 +25,7 @@ function fixture({ available = true, reducedTransparency = false, reducedMotion 
   };
   material = new WindowMaterial(win, { shouldUseDarkColors: true, prefersReducedTransparency: reducedTransparency }, { platform: 'darwin', bridge });
   material.update({ themeId: GLASS_THEME.id, glassTransparency: .38 });
-  const motion = new PanelMotion(win, { material, reducedMotion: () => reducedMotion, hidden: () => calls.push(['hidden']) });
+  const motion = new PanelMotion(win, { material, reducedMotion: () => reducedMotion, hidden: () => calls.push(['hidden']), focus });
   const start = (visible, edge = 'right') => { motion.request(visible, edge); motion.ready(motion.id); };
   const settle = () => motion.finish(motion.id);
   const effectCount = () => calls.filter(([kind]) => kind === 'blur' || kind === 'vibrancy').length;
@@ -114,3 +115,44 @@ for (const options of [{ available: false }, { failBlur: true }]) {
     f.settle(); assert.equal(f.material.status.backend, 'none');
   });
 }
+
+function focusFixture() {
+  const events = [];
+  let front = 42, active = false;
+  const bridge = {
+    frontmost: () => active ? 0 : front,
+    activate: () => { active = true; events.push('activate'); },
+    restore: pid => { if (!active) return false; active = false; front = pid; events.push(['restore', pid]); return true; }
+  };
+  const clickInto = pid => { active = false; front = pid; };
+  return { focus: new AppFocus({ bridge }), events, clickInto };
+}
+
+test('opening activates Margin before the panel shows; closing returns focus to the previous app', t => {
+  const { focus, events } = focusFixture();
+  const f = fixture({ focus }); t.after(() => f.motion.dispose());
+  f.win.show = () => { events.push('show'); };
+  f.start(true); f.settle();
+  assert.deepEqual(events, ['activate', 'show', 'show']);
+  f.win.hide = () => events.push('hide');
+  f.start(false); f.settle();
+  assert.deepEqual(events.slice(3), ['hide', ['restore', 42]]);
+});
+
+test('an app clicked into while the panel is open keeps focus after it closes', () => {
+  const { focus, events, clickInto } = focusFixture();
+  focus.activate(); clickInto(7); focus.restore();
+  assert.deepEqual(events, ['activate'], 'Margin is no longer active, so it must not steal focus back');
+});
+
+test('clicking back into the panel returns focus to the app it came from', () => {
+  const { focus, events, clickInto } = focusFixture();
+  focus.activate(); clickInto(7); focus.activate(); focus.activate(); focus.restore();
+  assert.deepEqual(events, ['activate', 'activate', 'activate', ['restore', 7]]);
+});
+
+test('without the native bridge, focus handling is a no-op', () => {
+  const focus = new AppFocus({ bridge: undefined });
+  focus.activate(); focus.restore();
+  assert.equal(focus.previous, 0);
+});

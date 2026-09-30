@@ -11,6 +11,7 @@ import { connectionInfo } from '../shared/connections.mjs';
 import { fetchVaultTheme } from './vault-theme.mjs';
 import { PanelMotion } from './panel-motion.mjs';
 import { WindowMaterial } from './window-material.mjs';
+import { AppFocus } from './app-focus.mjs';
 import { MONOKAI_SODA_THEME } from '../shared/themes.mjs';
 import { parseAppLink } from '../shared/app-links.mjs';
 import { createLinkOpener, installedLinkApps } from './document-links.mjs';
@@ -27,7 +28,7 @@ let win, tray, store, settings, timer, edgeTimer, vaultTimer, vaultPalette, quit
 let vaultStatus = { connected: false, checkedAt: null };
 const vaultRequests = new Map();
 const edgeBars = new Map();
-let panelDisplayId, panelMotion, windowMaterial, panelReady = false;
+let panelDisplayId, panelMotion, windowMaterial, appFocus, panelReady = false;
 let edgeEnteredAt = null, lastHideAt = 0, quitRequested = false;
 const backupPlans = new Map();
 const linkLaunches = [];
@@ -176,7 +177,8 @@ if (store && settings) {
     webPreferences: { preload: path.join(root, 'app/preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true }
   });
   windowMaterial = new WindowMaterial(win, nativeTheme);
-  panelMotion = new PanelMotion(win, { material: windowMaterial, reducedMotion: () => nativeTheme.prefersReducedMotion, hidden: syncEdgeBars });
+  appFocus = new AppFocus();
+  panelMotion = new PanelMotion(win, { material: windowMaterial, focus: appFocus, reducedMotion: () => nativeTheme.prefersReducedMotion, hidden: syncEdgeBars });
   if (process.platform === 'darwin') win.setWindowButtonVisibility(false);
   if (process.env.MARGIN_SMOKE_TEST) win.webContents.on('console-message', event => console.log('Renderer:', event.message));
   position(); applySettings();
@@ -191,6 +193,8 @@ if (store && settings) {
   win.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   win.on('close', event => { if (!quitting) { event.preventDefault(); hide(); } });
   win.on('hide', () => { if (panelReady) syncEdgeBars(); });
+  // Clicking back into the open panel makes it key without activating Margin.
+  win.on('focus', () => { if (panelMotion.visible) appFocus.activate(); });
   win.on('focus', () => { if (settings.themeId === 'vault') refreshVaultTheme().catch(console.error); });
   for (const [channel, method] of [['panel:motion-ready', 'ready'], ['panel:motion-finished', 'finish']]) {
     ipcMain.on(channel, (event, id) => {
