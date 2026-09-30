@@ -6,17 +6,10 @@ if (process.platform === 'darwin') {
 
 // The panel is a non-activating window, so it can hold keyboard focus while
 // another app stays active and receives ⌘V, ⌘C, ⌘Z. Activate Margin while it
-// is open and give focus back to the previous app when it closes.
+// is open; when it closes, the bridge gives focus back to the app active
+// before Margin, unless the user has since moved to another app.
 export class AppFocus {
-  constructor(options = {}) { this.bridge = 'bridge' in options ? options.bridge : bridge; this.previous = 0; }
-  activate() {
-    if (!this.bridge?.activate) return;
-    const front = this.bridge.frontmost();
-    if (front > 0) this.previous = front;
-    this.bridge.activate();
-  }
-  restore() {
-    const previous = this.previous; this.previous = 0;
-    if (previous > 0) this.bridge?.restore?.(previous);
-  }
+  constructor(options = {}) { this.bridge = 'bridge' in options ? options.bridge : bridge; }
+  activate() { this.bridge?.activate?.(); }
+  restore() { return Boolean(this.bridge?.restore?.()); }
 }

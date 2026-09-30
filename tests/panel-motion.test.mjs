@@ -116,16 +116,18 @@ for (const options of [{ available: false }, { failBlur: true }]) {
   });
 }
 
+// Mirrors the native bridge: it tracks the last other app to be active and
+// restores it only while Margin is still frontmost.
 function focusFixture() {
   const events = [];
-  let front = 42, active = false;
+  let front = 42, previous = 42;
   const bridge = {
-    frontmost: () => active ? 0 : front,
-    activate: () => { active = true; events.push('activate'); },
-    restore: pid => { if (!active) return false; active = false; front = pid; events.push(['restore', pid]); return true; }
+    activate: () => { front = 'margin'; events.push('activate'); },
+    restore: () => { if (front !== 'margin') return false; front = previous; events.push(['restore', previous]); return true; }
   };
-  const clickInto = pid => { active = false; front = pid; };
-  return { focus: new AppFocus({ bridge }), events, clickInto };
+  const switchTo = pid => { front = previous = pid; };
+  const clickPanel = () => { front = 'margin'; };
+  return { focus: new AppFocus({ bridge }), events, switchTo, clickPanel };
 }
 
 test('opening activates Margin before the panel shows; closing returns focus to the previous app', t => {
@@ -139,20 +141,22 @@ test('opening activates Margin before the panel shows; closing returns focus to 
   assert.deepEqual(events.slice(3), ['hide', ['restore', 42]]);
 });
 
-test('an app clicked into while the panel is open keeps focus after it closes', () => {
-  const { focus, events, clickInto } = focusFixture();
-  focus.activate(); clickInto(7); focus.restore();
-  assert.deepEqual(events, ['activate'], 'Margin is no longer active, so it must not steal focus back');
+test('an app switched to while the panel is open keeps focus after it closes', () => {
+  const { focus, events, switchTo } = focusFixture();
+  focus.activate(); switchTo(7);
+  assert.equal(focus.restore(), false);
+  assert.deepEqual(events, ['activate'], 'Margin is no longer frontmost, so it must not take focus back');
 });
 
 test('clicking back into the panel returns focus to the app it came from', () => {
-  const { focus, events, clickInto } = focusFixture();
-  focus.activate(); clickInto(7); focus.activate(); focus.activate(); focus.restore();
-  assert.deepEqual(events, ['activate', 'activate', 'activate', ['restore', 7]]);
+  const { focus, events, switchTo, clickPanel } = focusFixture();
+  focus.activate(); switchTo(7); clickPanel();
+  assert.equal(focus.restore(), true);
+  assert.deepEqual(events, ['activate', ['restore', 7]]);
 });
 
 test('without the native bridge, focus handling is a no-op', () => {
   const focus = new AppFocus({ bridge: undefined });
-  focus.activate(); focus.restore();
-  assert.equal(focus.previous, 0);
+  focus.activate();
+  assert.equal(focus.restore(), false);
 });

@@ -48,38 +48,40 @@ static napi_value Configure(napi_env env, napi_callback_info info) {
   }
   napi_value value; napi_create_int32(env, result, &value); return value;
 }
-static napi_value Pid(napi_env env, int32_t pid) {
-  napi_value value; napi_create_int32(env, pid, &value); return value;
-}
-// The app to hand focus back to, or 0 when this app is already frontmost.
-static napi_value Frontmost(napi_env env, napi_callback_info info) {
-  NSRunningApplication* front = [[NSWorkspace sharedWorkspace] frontmostApplication];
+// The last other app to be active: where focus goes back to when the panel closes.
+static pid_t previousPid = 0;
+static void TrackActivations() {
   pid_t self = [[NSProcessInfo processInfo] processIdentifier];
-  return Pid(env, front && [front processIdentifier] != self ? [front processIdentifier] : 0);
+  NSRunningApplication* front = [[NSWorkspace sharedWorkspace] frontmostApplication];
+  if (front && [front processIdentifier] != self) previousPid = [front processIdentifier];
+  [[[NSWorkspace sharedWorkspace] notificationCenter] addObserverForName:NSWorkspaceDidActivateApplicationNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification* note) {
+    NSRunningApplication* app = note.userInfo[NSWorkspaceApplicationKey];
+    if (app && [app processIdentifier] != self) previousPid = [app processIdentifier];
+  }];
 }
 static napi_value Activate(napi_env env, napi_callback_info info) {
   [NSApp activateIgnoringOtherApps:YES];
   napi_value value; napi_get_boolean(env, true, &value); return value;
 }
-// Only while this app is still active: an app the user clicked into keeps focus.
+// Hand focus back to the app active before this one, but only while this app
+// is still frontmost: an app the user clicked into keeps focus. NSApp.isActive
+// can lag behind a click into another app, so ask the workspace instead.
 static napi_value Restore(napi_env env, napi_callback_info info) {
-  size_t argc = 1; napi_value args[1]; int32_t pid = 0;
-  napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+  pid_t self = [[NSProcessInfo processInfo] processIdentifier];
+  NSRunningApplication* front = [[NSWorkspace sharedWorkspace] frontmostApplication];
+  NSRunningApplication* previous = previousPid > 0 ? [NSRunningApplication runningApplicationWithProcessIdentifier:previousPid] : nil;
   bool restored = false;
-  if (argc == 1 && napi_get_value_int32(env, args[0], &pid) == napi_ok && pid > 0 && [NSApp isActive]) {
-    NSRunningApplication* previous = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
-    if (previous && ![previous isTerminated]) restored = [previous activateWithOptions:0];
-  }
+  if (front && [front processIdentifier] == self && previous && ![previous isTerminated]) restored = [previous activateWithOptions:0];
   napi_value value; napi_get_boolean(env, restored, &value); return value;
 }
 static napi_value Init(napi_env env, napi_value exports) {
+  static dispatch_once_t once; dispatch_once(&once, ^{ TrackActivations(); });
   napi_property_descriptor properties[] = {
     { "available", nullptr, Available, nullptr, nullptr, nullptr, napi_default, nullptr },
     { "configure", nullptr, Configure, nullptr, nullptr, nullptr, napi_default, nullptr },
-    { "frontmost", nullptr, Frontmost, nullptr, nullptr, nullptr, napi_default, nullptr },
     { "activate", nullptr, Activate, nullptr, nullptr, nullptr, napi_default, nullptr },
     { "restore", nullptr, Restore, nullptr, nullptr, nullptr, napi_default, nullptr }
   };
-  napi_define_properties(env, exports, 5, properties); return exports;
+  napi_define_properties(env, exports, 4, properties); return exports;
 }
 NAPI_MODULE(NODE_GYP_MODULE_NAME, Init)
