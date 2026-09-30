@@ -4,7 +4,9 @@ A local macOS screen-edge notebook with Markdown, Alfred quick capture, and a bu
 
 ## Download
 
-Download [Margin Notes v0.1.0 for Apple Silicon](https://github.com/cxrobx/Margin/releases/tag/v0.1.0). Margin requires macOS 13 or newer. Open the disk image and drag **Margin Notes** to Applications, or unzip the app and move it there. No Node.js installation is needed to run the packaged app. The release also includes the optional Alfred 5 quick-capture workflow. The app and disk image are Developer ID signed; Apple notarization is pending, so macOS may require manual approval to open this version. You can also [build from source](#develop-and-verify).
+Download the latest [Margin Notes release for Apple Silicon](https://github.com/cxrobx/Margin/releases/latest). Margin requires macOS 13 or newer. Open the disk image and drag **Margin Notes** to Applications, or unzip the app and move it there. No Node.js installation is needed to run the packaged app. The release also includes the optional Alfred 5 quick-capture workflow. The app and disk image are Developer ID signed and notarized by Apple, so they open without a warning. You can also [build from source](#develop-and-verify).
+
+From 0.1.1, Margin Notes updates itself. It checks for a new release shortly after launch and once a day, asks before downloading one, and asks again before restarting. **Check for Updates…** in the menu bar icon's menu or the app menu checks right away. macOS installs an update only if it is signed with the same Developer ID as the running app. Version 0.1.0 has no updater, so install 0.1.1 or later by hand once.
 
 ## Use the app
 
@@ -156,6 +158,8 @@ MARGIN_SMOKE_TEST=1 MARGIN_DATA_DIR=/private/tmp/margin-electron-smoke node_modu
 Add `MARGIN_FOLDERS_SMOKE_TEST=1` to drive nested folders, remembered sub-tabs, and sections instead (`MARGIN_FEATURE_SMOKE_TEST=1` and `MARGIN_LINK_SMOKE_TEST=1` select the other suites).
 
 Use a fresh directory for each smoke run. Screenshots are written to `artifacts/`. Development profiles, local notes, output bundles, and dependencies are ignored by Git.
+
+To release, bump `version` in `package.json`, commit, and run `npm run release -- X.Y.Z` from a clean tree. It builds the disk image and zip, signs, notarizes and staples both, writes `latest-mac.yml`, verifies the result, and prints the `gh release create` commands; it publishes only with `--publish`. After a release, `npm run verify:update-feed` checks the live update feed the way an installed copy reads it.
 
 ## License
 
