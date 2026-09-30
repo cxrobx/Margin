@@ -11,6 +11,7 @@ import { connectionInfo } from '../shared/connections.mjs';
 import { fetchVaultTheme } from './vault-theme.mjs';
 import { PanelMotion } from './panel-motion.mjs';
 import { WindowMaterial } from './window-material.mjs';
+import { MONOKAI_SODA_THEME } from '../shared/themes.mjs';
 import { parseAppLink } from '../shared/app-links.mjs';
 import { createLinkOpener, installedLinkApps } from './document-links.mjs';
 
@@ -73,7 +74,7 @@ async function flushEditor() {
 function hide() { void flushEditor(); lastHideAt = Date.now(); panelMotion.request(false, settings.edge); }
 function toggle() { panelMotion.visible ? hide() : show(); }
 function applySettings() {
-  const source = settings.themeId === 'vault' && vaultPalette ? vaultPalette.mode : settings.theme;
+  const source = settings.themeId === 'vault' && vaultPalette ? vaultPalette.mode : settings.themeId === MONOKAI_SODA_THEME.id ? 'dark' : settings.theme;
   if (nativeTheme.themeSource !== source) nativeTheme.themeSource = source;
   windowMaterial.update(settings);
   win.setAlwaysOnTop(settings.alwaysOnTop, 'floating');

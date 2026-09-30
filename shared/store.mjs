@@ -240,7 +240,7 @@ export class NoteStore {
   }
   async setSettings(input) { return this.mutate(state => {
     const settings = settingsSchema.parse({ ...state.settings, ...input });
-    if (!['default', 'vault', 'cxtasks-glass'].includes(settings.themeId) && !state.themes.some(t => t.id === settings.themeId)) throw new Error('Theme not found.');
+    if (!['default', 'vault', 'cxtasks-glass', 'monokai-soda'].includes(settings.themeId) && !state.themes.some(t => t.id === settings.themeId)) throw new Error('Theme not found.');
     if (settings.vaultAddress !== state.settings.vaultAddress) state.vaultTheme = { palette: null, variants: { light: null, dark: null } };
     state.settings = settings; return state.settings;
   }); }

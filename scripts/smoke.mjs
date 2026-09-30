@@ -240,6 +240,15 @@ export async function runSmoke(win, store, panel) {
     await waitNative(() => panel.motion.phase === 'open');
     if (desktopGlass) assert.equal(panel.material.status.backend, 'desktop-blur');
     await click('Preferences'); await click('Themes');
+    await click('Use Monokai Soda theme');
+    await waitFor(`document.documentElement.dataset.material === 'vault' && document.documentElement.dataset.theme === 'dark'`);
+    assert.equal(nativeTheme.themeSource, 'dark', 'Monokai Soda is dark only');
+    assert.equal(await run(`document.querySelector('[aria-label="Light appearance"]').disabled`), true);
+    assert.equal(await run(`document.documentElement.style.getPropertyValue('--glass-pane-alpha')`), '');
+    await screenshot('margin-monokai-soda-themes.png');
+    await click('Back to preferences'); await click('Back to notes');
+    await screenshot('margin-monokai-soda.png');
+    await click('Preferences'); await click('Themes');
     await click('Use Default theme');
     await waitFor(`document.documentElement.dataset.material === 'default'`);
     assert.equal(await run(`document.documentElement.style.getPropertyValue('--hue-teal')`), '');

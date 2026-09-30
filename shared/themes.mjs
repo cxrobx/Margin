@@ -27,6 +27,18 @@ export const GLASS_THEME = {
     'hue-blue': '#007aff', 'hue-red': '#ff3b30', 'hue-green': '#1eb43c', 'hue-amber': '#e6a200', 'hue-purple': '#af52de', 'hue-teal': '#12a6c0', 'hue-sand': '#a2845e'
   }
 };
+// Monokai Soda is dark by design, so both appearance modes resolve to its one
+// palette. It wears the vault material: coloured headings and section hues.
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+export const MONOKAI_SODA_THEME = {
+  id: 'monokai-soda', name: 'Monokai Soda',
+  palette: {
+    mode: 'dark', revision: '', font: '',
+    bgPrimary: hex('#1a1a1a'), bgSidebar: hex('#141414'), bgSurface: hex('#222222'), bgElevated: hex('#292929'), bgInput: hex('#343434'),
+    ink: hex('#c4c5b5'), secondary: hex('#a8a996'), muted: hex('#9d9985'), faint: hex('#625e4c'), accent: hex('#f4005f'), accentHover: hex('#ff2a78'),
+    decoration: { headings: ['#f4005f', '#fa8419', '#e0d561', '#98e024', '#58d1eb', '#9d65ff'].map(hex), link: hex('#58d1eb') }
+  }
+};
 export const VAULT_COLOUR_KEYS = [...Array.from({ length: 6 }, (_, i) => `heading-${i + 1}`), 'vault-link', 'vault-sidebar'];
 export const APPEARANCE_KEYS = [...new Set([...Object.keys(DEFAULT_THEME.light), ...Object.keys(GLASS_THEME.dark), 'button-ink', 'glass-pane-alpha', 'glass-sidebar-alpha', ...VAULT_COLOUR_KEYS])];
 export function glassAlphas(transparency, mode, reducedTransparency = false) {
@@ -192,7 +204,7 @@ export function resolveAppearance(state, systemDark, reducedTransparency = false
     return { mode: requestedMode, custom: true, fallback: false, material: 'glass', glass,
       tokens: { ...GLASS_THEME[requestedMode], 'glass-pane-alpha': String(glass.pane), 'glass-sidebar-alpha': String(glass.sidebar) }, font: GLASS_THEME.font };
   }
-  const live = id === 'vault' ? state.vaultTheme.palette : null;
+  const live = id === 'vault' ? state.vaultTheme.palette : id === MONOKAI_SODA_THEME.id ? MONOKAI_SODA_THEME.palette : null;
   const saved = state.themes.find(t => t.id === id);
   const palette = live || saved?.palettes[requestedMode];
   const mode = palette?.mode || requestedMode;

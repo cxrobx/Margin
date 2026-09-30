@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { NoteStore } from '../shared/store.mjs';
-import { DEFAULT_THEME, parseVaultLook, vaultEndpoint, resolveAppearance, contrast, paletteTokens, GLASS_THEME, glassAlphas, parseVaultDecorations, parseComputedColour } from '../shared/themes.mjs';
+import { DEFAULT_THEME, parseVaultLook, vaultEndpoint, resolveAppearance, contrast, paletteTokens, GLASS_THEME, MONOKAI_SODA_THEME, vaultPaletteSchema, glassAlphas, parseVaultDecorations, parseComputedColour } from '../shared/themes.mjs';
 
 // The token block Onyx serves for this vault's AnuPpuccin light appearance.
 const CSS = ':root.vault-look{--bg-primary:253 246 227;--bg-sidebar:253 246 227;--bg-surface:241 234 210;--bg-elevated:253 246 227;--bg-input:244 237 214;--ink:0 43 54;--secondary:68 98 101;--muted:121 140 137;--faint:164 175 166;--accent:203 75 22;--accent-hover:152 67 30;--ui-font:"JetBrains Mono", Inter;color-scheme:light}';
@@ -178,4 +178,28 @@ test('vault heading and folder colours survive saved copies, restarts and partia
       for (const background of [p.bgPrimary,p.bgSidebar,p.bgSurface,p.bgElevated]) assert.ok(contrast(colour,background)>=4.5);
     }
   }
+});
+
+test('Monokai Soda is a built-in dark preset that stays readable and persists', async t => {
+  const p = vaultPaletteSchema.parse(MONOKAI_SODA_THEME.palette);
+  const store = await fixture(t);
+  await store.setSettings({ themeId: MONOKAI_SODA_THEME.id, theme: 'light' });
+  const state = await (await new NoteStore(store.dir).init()).read();
+  assert.equal(state.themes.length, 0, 'Built-in presets are available without a vault');
+  for (const systemDark of [false, true]) {
+    const appearance = resolveAppearance(state, systemDark);
+    assert.equal(appearance.mode, 'dark', 'A dark-only theme ignores the light setting');
+    assert.equal(appearance.material, 'vault');
+    assert.equal(appearance.fallback, false);
+    assert.equal(appearance.tokens.bg, 'rgb(26 26 26)');
+  }
+  const rgbOf = v => v.match(/\d+/g).map(Number);
+  const tokens = paletteTokens(p);
+  for (const background of [p.bgPrimary, p.bgSidebar, p.bgSurface, p.bgElevated]) {
+    assert.ok(contrast(p.ink, background) >= 7);
+    assert.ok(contrast(p.muted, background) >= 4.5);
+    for (let i = 1; i <= 6; i++) assert.ok(contrast(rgbOf(tokens['heading-' + i]), background) >= 4.5);
+  }
+  assert.ok(contrast(p.accent, rgbOf(tokens['button-ink'])) >= 4.5);
+  await assert.rejects(() => store.deleteTheme(MONOKAI_SODA_THEME.id), /Only a saved/);
 });

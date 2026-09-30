@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Check, ChevronRight, Copy, Folder, Monitor, Moon, Palette, RefreshCw, Sun, Trash2 } from 'lucide-react';
-import { DEFAULT_THEME, GLASS_THEME, APPEARANCE_KEYS, paletteTokens, resolveAppearance } from '../shared/themes.mjs';
+import { DEFAULT_THEME, GLASS_THEME, MONOKAI_SODA_THEME, APPEARANCE_KEYS, paletteTokens, resolveAppearance } from '../shared/themes.mjs';
 import './themes.css';
 
 function Preview({ tokens, glass = false }) {
@@ -57,6 +57,7 @@ export default function Themes({ state, api, act, back, reducedTransparency }) {
   const saved = state.themes.find(t => t.id === id);
   const mode = state.settings.theme === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : state.settings.theme;
   const following = id === 'vault' && Boolean(palette);
+  const darkOnly = id === MONOKAI_SODA_THEME.id;
   const appearance = resolveAppearance(state, mode === 'dark');
   async function refresh() {
     setRefreshing(true);
@@ -93,16 +94,19 @@ export default function Themes({ state, api, act, back, reducedTransparency }) {
       <h1>Make room<br />for your style.</h1>
       <p className="theme-intro">A familiar look for your little corner.</p>
       <div className="theme-section"><h2>Appearance</h2><div className="appearance-modes" role="group" aria-label="Appearance mode">
-        {[[ 'light', Sun, 'Light' ], [ 'dark', Moon, 'Dark' ], [ 'system', Monitor, 'System' ]].map(([value, Icon, label]) => <button key={value} aria-label={`${label} appearance`} aria-pressed={!following && state.settings.theme === value} disabled={following} onClick={() => act(api.settings({ theme: value }))}><Icon size={17} /><span>{label}</span></button>)}
-      </div><p className="theme-caption">{following ? 'Live matching follows Obsidian’s light or dark mode.' : state.settings.theme === 'system' ? 'Changes with your Mac’s appearance.' : `Always use ${state.settings.theme} mode.`}</p>
+        {[[ 'light', Sun, 'Light' ], [ 'dark', Moon, 'Dark' ], [ 'system', Monitor, 'System' ]].map(([value, Icon, label]) => <button key={value} aria-label={`${label} appearance`} aria-pressed={!following && !darkOnly && state.settings.theme === value} disabled={following || darkOnly} onClick={() => act(api.settings({ theme: value }))}><Icon size={17} /><span>{label}</span></button>)}
+      </div><p className="theme-caption">{following ? 'Live matching follows Obsidian’s light or dark mode.' : darkOnly ? 'Monokai Soda is a dark theme, so it stays dark.' : state.settings.theme === 'system' ? 'Changes with your Mac’s appearance.' : `Always use ${state.settings.theme} mode.`}</p>
       {appearance.fallback && <p className="theme-fallback">This copy has no {mode} palette yet. Default is used for {mode} mode. Switch Obsidian to {mode}, then update the copy below.</p>}
       </div>
-      <div className="theme-section"><h2>Saved themes<span>{state.themes.length + 2}</span></h2><div className="theme-library">
+      <div className="theme-section"><h2>Saved themes<span>{state.themes.length + 3}</span></h2><div className="theme-library">
         <button className={`theme-tile ${id === 'default' ? 'selected' : ''}`} aria-label="Use Default theme" aria-pressed={id === 'default'} onClick={() => select('default')}>
           <Preview tokens={DEFAULT_THEME[mode]} /><span className="theme-tile-label"><strong>Default</strong>{id === 'default' && <Check size={14} />}</span><small>Original cream & sage · Light + Dark</small>
         </button>
         <button className={`theme-tile ${id === GLASS_THEME.id ? 'selected' : ''}`} aria-label="Use CXTasks Glass theme" aria-pressed={id === GLASS_THEME.id} onClick={() => select(GLASS_THEME.id)}>
           <Preview tokens={GLASS_THEME[mode]} glass /><span className="theme-tile-label"><strong>CXTasks Glass</strong>{id === GLASS_THEME.id && <Check size={14} />}</span><small>Frosted panes & colour accents · Light + Dark</small>
+        </button>
+        <button className={`theme-tile ${id === MONOKAI_SODA_THEME.id ? 'selected' : ''}`} aria-label="Use Monokai Soda theme" aria-pressed={id === MONOKAI_SODA_THEME.id} onClick={() => select(MONOKAI_SODA_THEME.id)}>
+          <Preview tokens={paletteTokens(MONOKAI_SODA_THEME.palette)} /><span className="theme-tile-label"><strong>Monokai Soda</strong>{id === MONOKAI_SODA_THEME.id && <Check size={14} />}</span><small>Charcoal & neon accents · Dark only</small>
         </button>
         {state.themes.map(theme => <button key={theme.id} className={`theme-tile ${id === theme.id ? 'selected' : ''}`} aria-label={`Use ${theme.name} theme`} aria-pressed={id === theme.id} onClick={() => select(theme.id)}>
           <Preview tokens={theme.palettes[mode] ? paletteTokens(theme.palettes[mode]) : DEFAULT_THEME[mode]} /><span className="theme-tile-label"><strong>{theme.name}</strong>{id === theme.id && <Check size={14} />}</span><small>Vault copy · {theme.palettes.light && theme.palettes.dark ? 'Light + Dark' : theme.palettes.light ? 'Light captured' : 'Dark captured'}</small>

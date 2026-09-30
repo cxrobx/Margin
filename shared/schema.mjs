@@ -29,7 +29,7 @@ export const settingsSchema = z.object({
   cxtasksLinks: z.boolean().default(false),
   alwaysOnTop: z.boolean(), hotEdge: z.boolean(), showEdgeTab: z.boolean().default(true), edge: z.enum(['left', 'right']),
   theme: z.enum(['light', 'dark', 'system']),
-  themeId: z.union([z.enum(['default', 'vault', 'cxtasks-glass']), z.string().uuid()]).default('default'),
+  themeId: z.union([z.enum(['default', 'vault', 'cxtasks-glass', 'monokai-soda']), z.string().uuid()]).default('default'),
   glassTransparency: z.number().min(0).max(1).default(.38),
   vaultAddress: z.string().max(500).refine(value => { try { vaultEndpoint(value); return true; } catch { return false; } }, 'Use a local Onyx address, such as http://127.0.0.1:8899.').default('http://127.0.0.1:8899')
 }).strict();
