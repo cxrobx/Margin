@@ -26,6 +26,8 @@
 .rich-body .selectedCell { background: var(--soft); }
 .rich-body .ProseMirror-selectednode { outline: 1px solid var(--green); }
 .format-bubble { z-index: 23; max-width: calc(100vw - 24px); border: 1px solid var(--line); border-radius: 13px; background: color-mix(in srgb, var(--surface) 96%, transparent); color: var(--text); box-shadow: 0 5px 25px #0004; padding: 5px; backdrop-filter: blur(20px); }
+.format-tooltip { position: fixed; z-index: 100; display: flex; align-items: center; gap: 9px; max-width: calc(100vw - 16px); padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--text); box-shadow: 0 3px 12px #0003; font-size: 11px; line-height: 1.4; pointer-events: none; }
+.format-tooltip kbd { font-family: inherit; color: var(--muted); white-space: nowrap; }
 .bubble-tools { display: flex; align-items: center; gap: 1px; flex-wrap: wrap; }
 .bubble-tools button, .bubble-link > button { min-width: 22px; height: 27px; display: inline-flex; align-items: center; justify-content: center; padding: 2px 4px; border-radius: 6px; color: var(--text); }
 .bubble-tools button:hover, .bubble-tools button.selected, .bubble-submenu button:hover, .bubble-submenu button.selected { background: var(--soft); color: var(--text); }

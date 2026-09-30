@@ -35,21 +35,7 @@
 .bottom-area { padding: 10px 17px 0; background: transparent; }
 .new-note { height: 36px; font-size: 11px; color: var(--text); }
 .new-note:hover { color: var(--text); }
-.panel-tools { height: 45px; display: flex; align-items: center; gap: 5px; }
-.panel-tools .connect-banner {
-  width: auto;
-  background: transparent;
-  margin: 0;
-  border-radius: 6px;
-  padding: 6px 7px;
-  gap: 6px;
-  color: var(--text);
-}
-.panel-tools .connect-banner:hover { background: var(--soft); }
-.panel-tools .connect-banner > svg { color: var(--muted); }
-.panel-tools .connect-banner span { margin: 0; font-size: 10px; color: inherit; }
-.panel-save-status { margin-left: auto; margin-right: 5px; color: var(--muted); display: flex; align-items: center; gap: 5px; font-size: 9px; }
-.panel-save-status i { width: 4px; height: 4px; border-radius: 50%; background: #8b9c7b; }
+.panel-tools { height: 45px; display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
 .overlay, .modal-backdrop { inset: 0; }
 .overlay-top { height: 57px; padding: 0 17px; font-size: 12px; }
 .editor-scroll, .connection-content, .preferences-content, .activity-content { padding-left: 20px; padding-right: 20px; }

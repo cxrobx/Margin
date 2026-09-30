@@ -9,6 +9,7 @@ export async function richSmoke({ win, store, client, run, waitFor, click, scree
   const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
   const menuEdit = action => Menu.getApplicationMenu().getMenuItemById(action).click();
   const shortcut = (keyCode, modifiers) => {
+    win.focus();
     win.webContents.sendInputEvent({ type: 'keyDown', keyCode, modifiers });
     win.webContents.sendInputEvent({ type: 'keyUp', keyCode, modifiers });
   };
@@ -23,7 +24,7 @@ export async function richSmoke({ win, store, client, run, waitFor, click, scree
     await run(`document.querySelector('[data-note-id="${note.id}"] .card-title').dispatchEvent(new MouseEvent('dblclick', {bubbles:true,detail:2}))`);
     await waitFor(`Boolean(document.querySelector('.rich-body')?.editor)`);
   };
-  const select = async (text, collapse = false) => { await run(`
+  const select = async (text, collapse = false) => { win.focus(); await run(`
     const ed = document.querySelector('.rich-body').editor;
     let found;
     ed.state.doc.descendants((node, pos) => { if (found == null && node.isText && node.text.includes(${JSON.stringify(text)})) found = pos + node.text.indexOf(${JSON.stringify(text)}); });
@@ -100,17 +101,44 @@ export async function richSmoke({ win, store, client, run, waitFor, click, scree
   await click('Copy selected text');
   await pause(100);
   assert.equal(await clipboard.readText(), 'A quiet thought for today.');
-  await click('Bold');
+  const hover = async (label, expected = label) => {
+    win.focus();
+    await waitFor(`document.hasFocus()`);
+    await waitFor(visibleToolbar);
+    await pause(100);
+    const selector = `.format-bubble [aria-label=${JSON.stringify(label)}]`;
+    win.webContents.sendInputEvent({type:'mouseMove',x:0,y:0});
+    const point = await run(`const b=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); ({x:b.left+b.width/2,y:b.top+b.height/2})`);
+    win.webContents.sendInputEvent({type:'mouseMove',x:Math.round(point.x),y:Math.round(point.y)});
+    await waitFor(`document.querySelector('[role="tooltip"]')?.textContent === ${JSON.stringify(expected)}`);
+    const bounds = await run(`const t=document.querySelector('[role="tooltip"]'); const b=t.getBoundingClientRect(); ({left:b.left,right:b.right,top:b.top,bottom:b.bottom,width:innerWidth,height:innerHeight,visibility:getComputedStyle(t).visibility})`);
+    assert.equal(bounds.visibility, 'visible');
+    assert.ok(bounds.left >= 0 && bounds.right <= bounds.width && bounds.top >= 0 && bounds.bottom <= bounds.height, `${label} tooltip fits in the panel`);
+  };
+  for (const [label, keys] of [['Copy selected text','⌘C'],['Lists',''],['Text style',''],['Blockquote','⌘⇧B'],['Bold','⌘B'],['Italic','⌘I'],['Highlight','⌘⇧H'],['Strikethrough','⌘⇧S'],['Underline','⌘U'],['Edit link','⌘K'],['Inline code','⌘E'],['Code block','⌘⌥C'],['Clear formatting','⌘\\']]) await hover(label, label + keys);
+  await hover('Bold', 'Bold⌘B');
+  await screenshot('margin-formatting-shortcuts.png');
+  win.focus();
+  await waitFor(visibleToolbar);
+  assert.equal(await run(`const ed=document.querySelector('.rich-body').editor; ed.state.doc.textBetween(ed.state.selection.from,ed.state.selection.to)`), 'A quiet thought for today.', 'Hovering toolbar items preserves the selected text');
+  assert.equal(await run(`document.querySelector('.format-bubble [aria-label="Bold"]').getAttribute('aria-keyshortcuts')`), 'Meta+B');
+  shortcut('B', ['meta']);
+  await waitFor(`document.querySelector('.rich-body').editor.isActive('bold')`);
   assert.match(await markdown(), /\*\*A quiet thought for today\.\*\*/);
   menuEdit('undo');
   await waitFor(`!document.querySelector('.rich-body').editor.isActive('bold')`);
   menuEdit('redo');
   await waitFor(`document.querySelector('.rich-body').editor.isActive('bold')`);
-  for (const action of ['Italic', 'Highlight', 'Underline', 'Strikethrough']) await click(action);
-  await click('Edit link');
+  for (const [key, modifiers, mark] of [['I',['meta'],'italic'],['H',['meta','shift'],'highlight'],['U',['meta'],'underline'],['S',['meta','shift'],'strike']]) {
+    shortcut(key, modifiers);
+    await waitFor(`document.querySelector('.rich-body').editor.isActive('${mark}')`);
+  }
+  shortcut('K', ['meta']);
   await waitFor(`Boolean(document.querySelector('[aria-label="Link URL"]'))`);
+  await waitFor(`document.activeElement === document.querySelector('[aria-label="Link URL"]')`);
+  await hover('Apply link', 'Apply linkEnter');
   await run(`const input=document.querySelector('[aria-label="Link URL"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'example.com'); input.dispatchEvent(new Event('input',{bubbles:true}));`);
-  await click('Apply link');
+  shortcut('Return', []);
   await waitFor(`Boolean(document.querySelector('.rich-body a[href="https://example.com"]'))`);
   await select('A quiet thought for today.');
   await waitFor(visibleToolbar);
@@ -160,6 +188,94 @@ export async function richSmoke({ win, store, client, run, waitFor, click, scree
   assert.equal(await run(`Boolean(document.querySelector('.rich-body u mark, .rich-body mark u'))`), true);
   assert.equal(await run(`document.querySelector('[aria-label="Undo"]').disabled`), true, 'Saved editing sessions start fresh history');
   await click('Done editing'); await waitFor(`!document.querySelector('.editor')`);
+  // Actual desktop shortcuts also work at a caret and in every block style.
+  const keyboardNote = await create('Keyboard shortcuts', 'Keyboard sample');
+  await open(keyboardNote);
+  const resetKeyboardNote = async () => {
+    await run(`document.querySelector('.rich-body').editor.commands.setContent('Keyboard sample', {contentType:'markdown'}); document.querySelector('.rich-body').editor.commands.focus('end')`);
+    await waitFor(`document.activeElement === document.querySelector('.rich-body')`);
+    shortcut('A', ['meta']);
+    await waitFor(`const ed=document.querySelector('.rich-body').editor; ed.state.doc.textBetween(ed.state.selection.from,ed.state.selection.to) === 'Keyboard sample'`);
+  };
+  await resetKeyboardNote();
+  win.webContents.copy();
+  await pause(100);
+  assert.equal(await clipboard.readText(), 'Keyboard sample');
+  win.webContents.cut();
+  await waitFor(`document.querySelector('.rich-body').editor.isEmpty`);
+  win.webContents.paste();
+  await waitFor(`document.querySelector('.rich-body').textContent === 'Keyboard sample'`);
+  for (const [key, modifiers, node, attrs] of [
+    ['B',['meta','shift'],'blockquote'], ['E',['meta'],'code'], ['C',['meta','alt'],'codeBlock'],
+    ['8',['meta','shift'],'bulletList'], ['7',['meta','shift'],'orderedList'], ['9',['meta','shift'],'taskList'],
+    ...[1,2,3,4,5,6].map(level => [String(level),['meta','alt'],'heading',{level}])
+  ]) {
+    await resetKeyboardNote();
+    shortcut(key, modifiers);
+    await waitFor(`document.querySelector('.rich-body').editor.isActive(${JSON.stringify(node)}, ${JSON.stringify(attrs || {})})`);
+  }
+  shortcut('0', ['meta','alt']);
+  await waitFor(`document.querySelector('.rich-body').editor.isActive('paragraph') && !document.querySelector('.rich-body h6')`);
+  await resetKeyboardNote();
+  shortcut('B', ['meta']);
+  await waitFor(`document.querySelector('.rich-body').editor.isActive('bold')`);
+  shortcut('\\', ['meta']);
+  await waitFor(`!document.querySelector('.rich-body').editor.isActive('bold')`);
+  await run(`document.querySelector('.rich-body').editor.commands.focus('end')`);
+  shortcut('B', ['meta']);
+  await waitFor(`document.querySelector('.rich-body').editor.isActive('bold')`);
+  await win.webContents.insertText(' Bold at caret');
+  await waitFor(`document.querySelector('.rich-body strong')?.textContent === ' Bold at caret'`);
+  shortcut('B', ['meta']);
+  await win.webContents.insertText(' Plain again');
+  await waitFor(`document.querySelector('.rich-body').textContent.includes('Plain again') && !document.querySelector('.rich-body strong').textContent.includes('Plain again')`);
+  await resetKeyboardNote();
+  await waitFor(visibleToolbar);
+  await click('Lists');
+  for (const [label, keys] of [['Bullet list','⌘⇧8'],['Numbered list','⌘⇧7'],['Checklist','⌘⇧9']]) await hover(label, label + keys);
+  await click('Text style');
+  await hover('Paragraph', 'Paragraph⌘⌥0');
+  for (const level of [1,2,3,4,5,6]) await hover(`Heading ${level}`, `Heading ${level}⌘⌥${level}`);
+  shortcut('K', ['meta']);
+  await waitFor(`document.activeElement === document.querySelector('[aria-label="Link URL"]')`);
+  await win.webContents.insertText('javascript:alert(1)');
+  shortcut('Return', []);
+  await waitFor(`Boolean(document.querySelector('.bubble-link [role="alert"]'))`);
+  assert.equal(await markdown(), 'Keyboard sample');
+  shortcut('Escape', []);
+  await waitFor(`!document.querySelector('.bubble-link') && document.activeElement === document.querySelector('.rich-body')`);
+  assert.equal(await run(`Boolean(document.querySelector('.editor'))`), true, 'Escape dismisses the link field without closing the editor');
+  shortcut('K', ['meta']);
+  await waitFor(`document.activeElement === document.querySelector('[aria-label="Link URL"]')`);
+  await win.webContents.insertText('example.com/keyboard');
+  shortcut('Return', []);
+  await waitFor(`document.querySelector('.rich-body a')?.textContent === 'Keyboard sample'`);
+  await select('Keyboard sample');
+  await run(`const ed=document.querySelector('.rich-body').editor; ed.commands.setTextSelection(ed.state.selection.from + 4)`);
+  shortcut('K', ['meta']);
+  await waitFor(`document.activeElement === document.querySelector('[aria-label="Link URL"]') && document.querySelector('[aria-label="Link URL"]').value === 'https://example.com/keyboard'`);
+  await hover('Remove link', 'Remove link⌘⇧K');
+  await win.webContents.insertText('example.com/updated');
+  shortcut('Return', []);
+  await waitFor(`document.querySelector('.rich-body a')?.getAttribute('href') === 'https://example.com/updated'`);
+  await waitFor(`!document.querySelector('.bubble-link') && document.activeElement === document.querySelector('.rich-body')`);
+  assert.equal(await run(`document.querySelector('.rich-body').textContent`), 'Keyboard sample', 'Editing a link at the caret preserves its text');
+  shortcut('K', ['meta','shift']);
+  await waitFor(`!document.querySelector('.rich-body a')`);
+  await run(`document.querySelector('.rich-body').editor.commands.focus('end')`);
+  await waitFor(`document.activeElement === document.querySelector('.rich-body') && document.querySelector('.rich-body').editor.state.selection.empty`);
+  shortcut('K', ['meta']);
+  await waitFor(`document.activeElement === document.querySelector('[aria-label="Link URL"]')`);
+  await waitFor(visibleToolbar);
+  await win.webContents.insertText('example.com/inserted');
+  shortcut('Return', []);
+  await waitFor(`document.querySelector('.rich-body a')?.getAttribute('href') === 'https://example.com/inserted'`);
+  await waitFor(`!document.querySelector('.bubble-link') && document.activeElement === document.querySelector('.rich-body')`);
+  await win.webContents.insertText(' after link');
+  await waitFor(`document.querySelector('.rich-body').textContent.endsWith(' after link')`);
+  assert.equal(await run(`document.querySelector('.rich-body a').textContent`), 'example.com/inserted', 'Typing after an inserted link returns to plain text');
+  await click('Done editing'); await waitFor(`!document.querySelector('.editor')`);
+  assert.match((await store.get(keyboardNote.id)).body, /\[example\.com\/inserted\]\(https:\/\/example\.com\/inserted\) after link/);
   // Native undo must also work outside the note editor.
   await run(`document.querySelector('[aria-label="Search notes"]').focus()`);
   win.webContents.insertText('Rich text checks');
@@ -220,6 +336,8 @@ export async function richSmoke({ win, store, client, run, waitFor, click, scree
   await screenshot('margin-live-markdown.png');
   assert.match((await store.get(live.id)).body, /^# Heading/);
   // Escape saves the inline card and leaves the native notebook open.
+  await run(`document.querySelector('.rich-body').editor.commands.focus('end')`);
+  await waitFor(`document.activeElement === document.querySelector('.rich-body')`);
   shortcut('Escape', []);
   await waitFor(`!document.querySelector('.editor')`);
   assert.ok(win.isVisible());
@@ -311,7 +429,11 @@ export async function richSmoke({ win, store, client, run, waitFor, click, scree
   await heightSaved(null);
   assert.equal((await store.get(sized.id)).bodyHeight, null);
   await run(`window.margin.settings({themeId:'default',theme:'system'})`);
-  console.log('Rich editor smoke passed: native Cmd N creation from search and Preferences, draft flushing before the next note, native bottom-edge resize dragging in reading and editing modes, saved heights, folding, Escape cancellation, keyboard sizing and automatic-height reset, inline creation and editing, live typed/pasted Markdown, Escape and outside-click flushing, automatic updates, immediate-close flushing, inline autosave, conflict recovery, stronger dark highlights, floating toolbar, marks, links, lists, headings, code, Markdown round-trip, native title/search undo, body typing and formatting undo and redo, sanitization, and MCP readability.');
-  } catch (error) { console.error('Rich editor check failed:', error); throw error; }
+  console.log('Rich editor smoke passed: native formatting shortcuts, every toolbar tooltip, selected-text and caret link editing/insertion/removal, native Cmd N creation from search and Preferences, draft flushing before the next note, native bottom-edge resize dragging in reading and editing modes, saved heights, folding, Escape cancellation, keyboard sizing and automatic-height reset, inline creation and editing, live typed/pasted Markdown, Escape and outside-click flushing, automatic updates, immediate-close flushing, inline autosave, conflict recovery, stronger dark highlights, floating toolbar, marks, links, lists, headings, code, Markdown round-trip, native title/search undo, body typing and formatting undo and redo, sanitization, and MCP readability.');
+  } catch (error) {
+    console.error('Rich editor check failed:', error);
+    console.log('Formatting focus:', await run(`({active:document.activeElement?.tagName, activeLabel:document.activeElement?.getAttribute('aria-label'), link:document.querySelector('.bubble-link')?.outerHTML, selection:document.querySelector('.rich-body')?.editor?.state.selection.toJSON()})`));
+    throw error;
+  }
   finally { if (priorClipboard.length) await clipboard.write(priorClipboard); else clipboard.clear(); }
 }

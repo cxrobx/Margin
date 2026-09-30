@@ -31,6 +31,7 @@ export const settingsSchema = z.object({
   theme: z.enum(['light', 'dark', 'system']),
   themeId: z.union([z.enum(['default', 'vault', 'cxtasks-glass', 'monokai-soda']), z.string().uuid()]).default('default'),
   glassTransparency: z.number().min(0).max(1).default(.38),
+  themeSaturation: z.number().min(0).max(3).default(1),
   vaultAddress: z.string().max(500).refine(value => { try { vaultEndpoint(value); return true; } catch { return false; } }, 'Use a local Onyx address, such as http://127.0.0.1:8899.').default('http://127.0.0.1:8899')
 }).strict();
 export const dividerLabel = z.string().trim().max(80);

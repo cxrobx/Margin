@@ -10,6 +10,21 @@ import Placeholder from '@tiptap/extension-placeholder';
 import { TableKit } from '@tiptap/extension-table';
 import Image from '@tiptap/extension-image';
 import { safeAppHref } from '../shared/app-links.mjs';
+import { formattingActions } from './rich-shortcuts.mjs';
+
+const FormattingShortcuts = Extension.create({
+  name: 'marginFormattingShortcuts',
+  priority: 1000,
+  addOptions() { return { editLink: () => false }; },
+  addKeyboardShortcuts() {
+    const shortcuts = {
+      ...Object.fromEntries(Object.values(formattingActions).filter(action => action.command).map(({ shortcut, command }) => [shortcut, () => command(this.editor.chain()).run()])),
+      [formattingActions.link.shortcut]: () => this.options.editLink()
+    };
+    // Handle capital letter events too, including Shift combinations and Caps Lock.
+    return Object.fromEntries(Object.entries(shortcuts).flatMap(([key, command]) => [[key, command], [key.replace(/[a-z]$/, letter => letter.toUpperCase()), command]]));
+  }
+});
 
 // These two inline HTML tags travel with Markdown through MCP and render safely
 // in the reading view. No private editor JSON is needed to preserve formatting.
@@ -52,14 +67,14 @@ const MarkdownPaste = Extension.create({
     } } })];
   }
 });
-export function richExtensions(placeholder) {
+export function richExtensions(placeholder, editLink) {
   return [
     StarterKit.configure({
       underline: false, trailingNode: false,
       link: { openOnClick: false, autolink: true, markdownLinks: true, defaultProtocol: 'https', protocols: ['http', 'https', 'mailto', 'margin', 'file', 'obsidian', 'cxtasks'], isAllowedUri: value => Boolean(safeAppHref(value)) },
       undoRedo: { depth: 200, newGroupDelay: 500 }
     }),
-    MarkdownPaste, MarkdownUnderline, MarkdownHighlight, TaskList, LiveTaskItem.configure({ nested: true, HTMLAttributes: { 'data-type': 'taskItem' } }),
+    FormattingShortcuts.configure({ editLink }), MarkdownPaste, MarkdownUnderline, MarkdownHighlight, TaskList, LiveTaskItem.configure({ nested: true, HTMLAttributes: { 'data-type': 'taskItem' } }),
     TableKit.configure({ table: { resizable: false } }), LocalImagePlaceholder,
     Placeholder.configure({ placeholder }), Markdown.configure({ markedOptions: { gfm: true } })
   ];

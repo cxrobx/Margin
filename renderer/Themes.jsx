@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Check, ChevronRight, Copy, Folder, Monitor, Moon, Palette, RefreshCw, Sun, Trash2 } from 'lucide-react';
-import { DEFAULT_THEME, GLASS_THEME, MONOKAI_SODA_THEME, APPEARANCE_KEYS, paletteTokens, resolveAppearance } from '../shared/themes.mjs';
+import { DEFAULT_THEME, GLASS_THEME, MONOKAI_SODA_THEME, APPEARANCE_KEYS, paletteTokens, resolveAppearance, saturatedTokens } from '../shared/themes.mjs';
 import './themes.css';
 
-function Preview({ tokens, glass = false }) {
+function Preview({ tokens: originalTokens, saturation, glass = false }) {
+  const tokens = saturatedTokens(originalTokens, saturation);
   return <span className={`theme-preview ${glass ? 'glass-preview' : ''}`} aria-hidden="true" style={{ background: glass ? undefined : tokens.bg, color: tokens.text, borderColor: tokens.line }}>
     <span className="preview-heading">Margin<span style={{ color: tokens.green }}>＋</span></span>
     <span className="preview-card" style={{ background: tokens.sage }}><b>A little thought</b><i style={{ background: tokens.text }} /><i style={{ background: tokens.muted }} /></span>
@@ -34,23 +35,30 @@ export default function Themes({ state, api, act, back, reducedTransparency }) {
   const [error, setError] = useState('');
   const [address, setAddress] = useState(state.settings.vaultAddress);
   const [transparency, setTransparency] = useState(state.settings.glassTransparency);
-  const transparencyTimer = useRef(null);
-  const pendingTransparency = useRef(null);
-  useEffect(() => { setTransparency(state.settings.glassTransparency); }, [state.settings.glassTransparency]);
+  const [saturation, setSaturation] = useState(state.settings.themeSaturation ?? 1);
+  const appearanceTimer = useRef(null);
+  const pendingAppearance = useRef(null);
+  useEffect(() => {
+    if (pendingAppearance.current) return;
+    setTransparency(state.settings.glassTransparency);
+    setSaturation(state.settings.themeSaturation ?? 1);
+  }, [state.settings.glassTransparency, state.settings.themeSaturation]);
   useEffect(() => () => {
-    clearTimeout(transparencyTimer.current);
-    if (pendingTransparency.current !== null) act(api.settings({ glassTransparency: pendingTransparency.current }));
+    clearTimeout(appearanceTimer.current);
+    if (pendingAppearance.current) act(api.settings(pendingAppearance.current));
   }, []);
-  const adjustTransparency = value => {
-    setTransparency(value); pendingTransparency.current = value;
-    clearTimeout(transparencyTimer.current);
-    // Preview immediately; coalesce persisted writes while the slider moves.
-    applyAppearance({ ...state, settings: { ...state.settings, glassTransparency: value } }, matchMedia('(prefers-color-scheme: dark)').matches, reducedTransparency);
-    transparencyTimer.current = setTimeout(() => { pendingTransparency.current = null; act(api.settings({ glassTransparency: value })); }, 140);
+  const adjustAppearance = patch => {
+    const values = { glassTransparency: transparency, themeSaturation: saturation, ...patch };
+    setTransparency(values.glassTransparency); setSaturation(values.themeSaturation);
+    pendingAppearance.current = values;
+    clearTimeout(appearanceTimer.current);
+    // Preview immediately; coalesce persisted writes while either slider moves.
+    applyAppearance({ ...state, settings: { ...state.settings, ...values } }, matchMedia('(prefers-color-scheme: dark)').matches, reducedTransparency);
+    appearanceTimer.current = setTimeout(() => { pendingAppearance.current = null; act(api.settings(values)); }, 140);
   };
-  const select = themeId => {
-    clearTimeout(transparencyTimer.current); pendingTransparency.current = null; setError('');
-    act(api.settings({ themeId, glassTransparency: transparency }));
+  const select = patch => {
+    clearTimeout(appearanceTimer.current); pendingAppearance.current = null; setError('');
+    act(api.settings({ ...patch, glassTransparency: transparency, themeSaturation: saturation }));
   };
   const id = state.settings.themeId;
   const palette = state.vaultTheme.palette;
@@ -94,34 +102,40 @@ export default function Themes({ state, api, act, back, reducedTransparency }) {
       <h1>Make room<br />for your style.</h1>
       <p className="theme-intro">A familiar look for your little corner.</p>
       <div className="theme-section"><h2>Appearance</h2><div className="appearance-modes" role="group" aria-label="Appearance mode">
-        {[[ 'light', Sun, 'Light' ], [ 'dark', Moon, 'Dark' ], [ 'system', Monitor, 'System' ]].map(([value, Icon, label]) => <button key={value} aria-label={`${label} appearance`} aria-pressed={!following && !darkOnly && state.settings.theme === value} disabled={following || darkOnly} onClick={() => act(api.settings({ theme: value }))}><Icon size={17} /><span>{label}</span></button>)}
+        {[[ 'light', Sun, 'Light' ], [ 'dark', Moon, 'Dark' ], [ 'system', Monitor, 'System' ]].map(([value, Icon, label]) => <button key={value} aria-label={`${label} appearance`} aria-pressed={!following && !darkOnly && state.settings.theme === value} disabled={following || darkOnly} onClick={() => select({ theme: value })}><Icon size={17} /><span>{label}</span></button>)}
       </div><p className="theme-caption">{following ? 'Live matching follows Obsidian’s light or dark mode.' : darkOnly ? 'Monokai Soda is a dark theme, so it stays dark.' : state.settings.theme === 'system' ? 'Changes with your Mac’s appearance.' : `Always use ${state.settings.theme} mode.`}</p>
       {appearance.fallback && <p className="theme-fallback">This copy has no {mode} palette yet. Default is used for {mode} mode. Switch Obsidian to {mode}, then update the copy below.</p>}
       </div>
+      <div className="theme-section saturation-controls"><h2>Colour intensity<button className="saturation-reset" aria-label="Reset theme saturation" disabled={saturation === 1} onClick={() => adjustAppearance({ themeSaturation: 1 })}><RefreshCw size={11} />Reset</button></h2>
+        <label className="theme-slider-label" htmlFor="theme-saturation">Saturation<output>{Math.round(saturation * 100)}%</output></label>
+        <input id="theme-saturation" aria-label="Theme saturation" aria-valuetext={`${Math.round(saturation * 100)} percent`} type="range" min="0" max="3" step="0.05" value={saturation} onChange={e => adjustAppearance({ themeSaturation: Number(e.target.value) })} />
+        <div className="theme-slider-ends"><span>Muted</span><span>Vivid</span></div>
+        <p className="theme-caption">Turn up the colour in any theme. 100% keeps its original palette.</p>
+      </div>
       <div className="theme-section"><h2>Saved themes<span>{state.themes.length + 3}</span></h2><div className="theme-library">
-        <button className={`theme-tile ${id === 'default' ? 'selected' : ''}`} aria-label="Use Default theme" aria-pressed={id === 'default'} onClick={() => select('default')}>
-          <Preview tokens={DEFAULT_THEME[mode]} /><span className="theme-tile-label"><strong>Default</strong>{id === 'default' && <Check size={14} />}</span><small>Original cream & sage · Light + Dark</small>
+        <button className={`theme-tile ${id === 'default' ? 'selected' : ''}`} aria-label="Use Default theme" aria-pressed={id === 'default'} onClick={() => select({ themeId: 'default' })}>
+          <Preview tokens={DEFAULT_THEME[mode]} saturation={saturation} /><span className="theme-tile-label"><strong>Default</strong>{id === 'default' && <Check size={14} />}</span><small>Original cream & sage · Light + Dark</small>
         </button>
-        <button className={`theme-tile ${id === GLASS_THEME.id ? 'selected' : ''}`} aria-label="Use CXTasks Glass theme" aria-pressed={id === GLASS_THEME.id} onClick={() => select(GLASS_THEME.id)}>
-          <Preview tokens={GLASS_THEME[mode]} glass /><span className="theme-tile-label"><strong>CXTasks Glass</strong>{id === GLASS_THEME.id && <Check size={14} />}</span><small>Frosted panes & colour accents · Light + Dark</small>
+        <button className={`theme-tile ${id === GLASS_THEME.id ? 'selected' : ''}`} aria-label="Use CXTasks Glass theme" aria-pressed={id === GLASS_THEME.id} onClick={() => select({ themeId: GLASS_THEME.id })}>
+          <Preview tokens={GLASS_THEME[mode]} saturation={saturation} glass /><span className="theme-tile-label"><strong>CXTasks Glass</strong>{id === GLASS_THEME.id && <Check size={14} />}</span><small>Frosted panes & colour accents · Light + Dark</small>
         </button>
-        <button className={`theme-tile ${id === MONOKAI_SODA_THEME.id ? 'selected' : ''}`} aria-label="Use Monokai Soda theme" aria-pressed={id === MONOKAI_SODA_THEME.id} onClick={() => select(MONOKAI_SODA_THEME.id)}>
-          <Preview tokens={paletteTokens(MONOKAI_SODA_THEME.palette)} /><span className="theme-tile-label"><strong>Monokai Soda</strong>{id === MONOKAI_SODA_THEME.id && <Check size={14} />}</span><small>Charcoal & neon accents · Dark only</small>
+        <button className={`theme-tile ${id === MONOKAI_SODA_THEME.id ? 'selected' : ''}`} aria-label="Use Monokai Soda theme" aria-pressed={id === MONOKAI_SODA_THEME.id} onClick={() => select({ themeId: MONOKAI_SODA_THEME.id })}>
+          <Preview tokens={paletteTokens(MONOKAI_SODA_THEME.palette)} saturation={saturation} /><span className="theme-tile-label"><strong>Monokai Soda</strong>{id === MONOKAI_SODA_THEME.id && <Check size={14} />}</span><small>Charcoal & neon accents · Dark only</small>
         </button>
-        {state.themes.map(theme => <button key={theme.id} className={`theme-tile ${id === theme.id ? 'selected' : ''}`} aria-label={`Use ${theme.name} theme`} aria-pressed={id === theme.id} onClick={() => select(theme.id)}>
-          <Preview tokens={theme.palettes[mode] ? paletteTokens(theme.palettes[mode]) : DEFAULT_THEME[mode]} /><span className="theme-tile-label"><strong>{theme.name}</strong>{id === theme.id && <Check size={14} />}</span><small>Vault copy · {theme.palettes.light && theme.palettes.dark ? 'Light + Dark' : theme.palettes.light ? 'Light captured' : 'Dark captured'}</small>
+        {state.themes.map(theme => <button key={theme.id} className={`theme-tile ${id === theme.id ? 'selected' : ''}`} aria-label={`Use ${theme.name} theme`} aria-pressed={id === theme.id} onClick={() => select({ themeId: theme.id })}>
+          <Preview tokens={theme.palettes[mode] ? paletteTokens(theme.palettes[mode]) : DEFAULT_THEME[mode]} saturation={saturation} /><span className="theme-tile-label"><strong>{theme.name}</strong>{id === theme.id && <Check size={14} />}</span><small>Vault copy · {theme.palettes.light && theme.palettes.dark ? 'Light + Dark' : theme.palettes.light ? 'Light captured' : 'Dark captured'}</small>
         </button>)}
       </div>
       {saved && <div className="saved-theme-actions"><button disabled={!palette || saving} onClick={e => save(e, true)}><RefreshCw size={12} />Update from vault</button><button aria-label={`Remove ${saved.name} theme`} onClick={() => act(api.deleteTheme(saved.id), 'Theme removed')}><Trash2 size={12} />Remove copy</button></div>}
       </div>
       {id === GLASS_THEME.id && <div className="theme-section glass-controls"><h2>Glass</h2>
-        <label className="glass-slider-label" htmlFor="glass-transparency">Transparency<output>{Math.round(transparency * 100)}%</output></label>
-        <input id="glass-transparency" aria-label="Glass transparency" type="range" min="0" max="1" step="0.01" value={transparency} disabled={reducedTransparency} onChange={e => adjustTransparency(Number(e.target.value))} />
-        <div className="glass-slider-ends"><span>Opaque</span><span>Glass</span></div>
+        <label className="theme-slider-label" htmlFor="glass-transparency">Transparency<output>{Math.round(transparency * 100)}%</output></label>
+        <input id="glass-transparency" aria-label="Glass transparency" type="range" min="0" max="1" step="0.01" value={transparency} disabled={reducedTransparency} onChange={e => adjustAppearance({ glassTransparency: Number(e.target.value) })} />
+        <div className="theme-slider-ends"><span>Opaque</span><span>Glass</span></div>
         <p className="theme-caption">{reducedTransparency ? 'Your Mac’s Reduce Transparency setting keeps panes opaque.' : 'Blurred desktop, frosted cards, and the colours you know from CXTasks.'}</p>
       </div>}
       <div className="theme-section vault-section"><h2>Your Obsidian vault</h2>
-        <button className={`vault-theme-choice ${id === 'vault' ? 'selected' : ''}`} aria-label="Match vault" aria-pressed={id === 'vault'} onClick={() => select('vault')}>
+        <button className={`vault-theme-choice ${id === 'vault' ? 'selected' : ''}`} aria-label="Match vault" aria-pressed={id === 'vault'} onClick={() => select({ themeId: 'vault' })}>
           <span className="vault-color" style={{ background: palette ? paletteTokens(palette).bg : 'var(--soft)', color: palette ? paletteTokens(palette).green : 'var(--green)' }}><Folder size={21} /></span><span><strong>Match vault</strong><small>Same appearance as Onyx & CXTasks</small></span>{id === 'vault' ? <Check size={16} /> : <ChevronRight size={16} />}
         </button>
         <p className="vault-status" role="status"><i className={status.connected ? 'connected' : ''} />{status.connected ? `Vault connected · ${palette?.mode || 'Current'} appearance` : palette ? 'Last vault appearance saved on this Mac.' : refreshing ? 'Looking for your vault…' : 'Waiting for your vault.'}</p>

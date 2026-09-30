@@ -1,14 +1,48 @@
-import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { Bold, Italic, Highlighter, Strikethrough, Underline, Link2, Code2, Braces, Eraser, Copy, ListTodo, List, ListOrdered, Type, Quote, Check, X } from 'lucide-react';
 import { richExtensions } from './rich-extensions.mjs';
+import { formattingActions, shortcutHint } from './rich-shortcuts.mjs';
 import { editableLink, parseAppLink } from '../shared/app-links.mjs';
 import { TaskLinksContext } from './task-links-context.mjs';
 import './rich-text.css';
 
-function Tool({ label, active = false, children, ...props }) {
-  return <button type="button" aria-label={label} title={label} aria-pressed={active} className={active ? 'selected' : ''} onMouseDown={e => e.preventDefault()} {...props}>{children}</button>;
+function Tool({ label, action, active = false, children, onClick, type = 'button', ...props }) {
+  const hint = shortcutHint(formattingActions[action]?.shortcut);
+  const description = hint.label ? `${label} (${hint.label})` : label;
+  const id = useId();
+  const button = useRef(null);
+  const tooltip = useRef(null);
+  const [show, setShow] = useState(false);
+  const [position, setPosition] = useState(null);
+  const hide = () => { setShow(false); setPosition(null); };
+  useLayoutEffect(() => {
+    if (!show) return;
+    const anchor = button.current.getBoundingClientRect();
+    const tip = tooltip.current.getBoundingClientRect();
+    setPosition({ left: Math.max(8, Math.min(anchor.left + (anchor.width - tip.width) / 2, innerWidth - tip.width - 8)), top: anchor.bottom + tip.height + 14 <= innerHeight ? anchor.bottom + 6 : Math.max(8, anchor.top - tip.height - 6) });
+  }, [show, description]);
+  useEffect(() => {
+    if (!show) return;
+    document.addEventListener('scroll', hide, true);
+    document.addEventListener('keydown', hide, true);
+    document.addEventListener('pointerdown', hide, true);
+    window.addEventListener('resize', hide);
+    return () => {
+      document.removeEventListener('scroll', hide, true);
+      document.removeEventListener('keydown', hide, true);
+      document.removeEventListener('pointerdown', hide, true);
+      window.removeEventListener('resize', hide);
+    };
+  }, [show]);
+  return <>
+    <button ref={button} type={type} aria-label={label} aria-description={description} aria-keyshortcuts={hint.aria} aria-describedby={show ? id : undefined} aria-pressed={type === 'button' ? active : undefined} className={active ? 'selected' : ''}
+      onMouseEnter={() => setShow(true)} onMouseLeave={hide} onFocus={() => setShow(true)} onBlur={hide}
+      onMouseDown={e => e.preventDefault()} onClick={e => { hide(); onClick?.(e); }} {...props}>{children}</button>
+    {show && createPortal(<span ref={tooltip} id={id} role="tooltip" className="format-tooltip" style={{ ...position, visibility: position ? 'visible' : 'hidden' }}>{label}{hint.label && <kbd>{hint.label}</kbd>}</span>, document.body)}
+  </>;
 }
 const RichText = forwardRef(function RichText({ body, visible, onChange, onHistoryChange, copy, placeholder, focus }, ref) {
   const cxtasksLinks = React.useContext(TaskLinksContext);
@@ -16,15 +50,19 @@ const RichText = forwardRef(function RichText({ body, visible, onChange, onHisto
   const initialFocus = useRef(focus);
   const focused = useRef(false);
   const container = useRef(null);
-  const extensions = useMemo(() => richExtensions(placeholder), [placeholder]);
+  const editLink = useRef(null);
+  const extensions = useMemo(() => richExtensions(placeholder, () => { editLink.current?.(); return true; }), [placeholder]);
   const editorProps = useMemo(() => ({ attributes: { class: 'rich-body markdown', role: 'textbox', 'aria-label': 'Note body', 'aria-multiline': 'true', spellcheck: 'true' } }), []);
   const [scrollTarget, setScrollTarget] = useState(null);
   const options = useMemo(() => ({ strategy: 'fixed', placement: 'top', offset: 8, flip: { padding: 12 }, shift: { padding: 12 }, scrollTarget: scrollTarget || window }), [scrollTarget]);
   const appendTo = useCallback(() => document.querySelector('.app-shell') || document.body, []);
   const changeRef = useRef(onChange); changeRef.current = onChange;
   const visibleRef = useRef(visible); visibleRef.current = visible;
-  const shouldShow = useCallback(({ editor: ed, view, state }) => visibleRef.current && ed.isEditable && !state.selection.empty && (view.hasFocus() || Boolean(document.activeElement?.closest('.format-bubble'))), []);
   const [menu, setMenu] = useState(null);
+  const [linkRequest, setLinkRequest] = useState(0);
+  const menuRef = useRef(menu); menuRef.current = menu;
+  const linkInput = useRef(null);
+  const shouldShow = useCallback(({ editor: ed, view, state }) => visibleRef.current && ed.isEditable && (!state.selection.empty || menuRef.current === 'link') && (view.hasFocus() || Boolean(document.activeElement?.closest('.format-bubble'))), []);
   const [link, setLink] = useState('');
   const [linkError, setLinkError] = useState('');
   const editor = useEditor({
@@ -58,7 +96,22 @@ const RichText = forwardRef(function RichText({ body, visible, onChange, onHisto
   // a conflicting note starts a fresh session with its own initial content.
   useEffect(() => { onHistoryChange({ undo: Boolean(flags.undo), redo: Boolean(flags.redo) }); }, [flags.undo, flags.redo, onHistoryChange]);
   useEffect(() => { if (!visible) { setMenu(null); editor?.commands.setMeta('margin-formatting', 'hide'); } }, [visible, editor]);
-  useEffect(() => { editor?.commands.setMeta('margin-formatting', 'updatePosition'); }, [menu, linkError, editor]);
+  useEffect(() => {
+    if (!editor) return;
+    if (visible && menu === 'link') {
+      // Let any pending editor focus finish before handing focus to the URL.
+      const frame = requestAnimationFrame(() => {
+        if (editor.isDestroyed) return;
+        editor.commands.setMeta('margin-formatting', 'show');
+        editor.commands.setMeta('margin-formatting', 'updatePosition');
+        linkInput.current?.focus();
+        linkInput.current?.select();
+      });
+      return () => cancelAnimationFrame(frame);
+    } else if (editor.state.selection.empty) editor.commands.setMeta('margin-formatting', 'hide');
+    editor.commands.setMeta('margin-formatting', 'updatePosition');
+  }, [menu, linkRequest, visible, editor]);
+  useEffect(() => { editor?.commands.setMeta('margin-formatting', 'updatePosition'); }, [linkError, editor]);
   useImperativeHandle(ref, () => ({
     undo: () => editor?.commands.undo(), redo: () => editor?.commands.redo(),
     focus: () => editor?.commands.focus('start'),
@@ -66,10 +119,11 @@ const RichText = forwardRef(function RichText({ body, visible, onChange, onHisto
     checklist: () => editor?.chain().focus().toggleTaskList().run(),
     codeBlock: () => editor?.chain().focus().setCodeBlock().run(),
   }), [editor]);
-  if (!editor) return null;
   const run = command => { command(editor.chain().focus()).run(); setMenu(null); };
   const toggleMenu = value => { setMenu(old => old === value ? null : value); };
-  const openLink = () => { setLink(editor.getAttributes('link').href || ''); setLinkError(''); toggleMenu('link'); };
+  const openLink = () => { if (!editor) return; setLink(editor.getAttributes('link').href || ''); setLinkError(''); setMenu('link'); setLinkRequest(value => value + 1); };
+  editLink.current = openLink;
+  if (!editor) return null;
   const applyLink = e => {
     e.preventDefault();
     if (!link.trim()) { run(chain => chain.extendMarkRange('link').unsetLink()); return; }
@@ -79,12 +133,14 @@ const RichText = forwardRef(function RichText({ body, visible, onChange, onHisto
       if (parseAppLink(href).kind === 'task' && !cxtasksLinks) throw new Error('Enable CXTasks links in Preferences to add a task link.');
     }
     catch (error) { setLinkError(error.message); return; }
-    run(chain => chain.extendMarkRange('link').setLink({ href }));
+    if (editor.state.selection.empty && !editor.isActive('link')) {
+      run(chain => chain.insertContent({ type: 'text', text: link.trim(), marks: [{ type: 'link', attrs: { href } }] }).unsetMark('link'));
+    } else run(chain => chain.extendMarkRange('link').setLink({ href }));
   };
   const actions = [
-    ['Bold', Bold, 'bold', chain => chain.toggleBold()], ['Italic', Italic, 'italic', chain => chain.toggleItalic()],
-    ['Highlight', Highlighter, 'highlight', chain => chain.toggleHighlight()], ['Strikethrough', Strikethrough, 'strike', chain => chain.toggleStrike()],
-    ['Underline', Underline, 'underline', chain => chain.toggleUnderline()]
+    ['Bold', Bold, 'bold'], ['Italic', Italic, 'italic'],
+    ['Highlight', Highlighter, 'highlight'], ['Strikethrough', Strikethrough, 'strike'],
+    ['Underline', Underline, 'underline']
   ];
   return <div ref={container} className="rich-editor-content" hidden={!visible}>
     <EditorContent editor={editor} />
@@ -93,32 +149,40 @@ const RichText = forwardRef(function RichText({ body, visible, onChange, onHisto
       options={options}
       className="format-bubble" role="toolbar" aria-label="Text formatting">
       <div className="bubble-tools">
-        <Tool label="Copy selected text" onClick={() => copy(editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, '\n'))}><Copy size={14} /></Tool>
+        <Tool label="Copy selected text" action="copy" onClick={() => copy(editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, '\n'))}><Copy size={14} /></Tool>
         <i className="tool-separator" />
         <Tool label="Lists" active={flags.list} onClick={() => toggleMenu('lists')}><ListTodo size={15} /></Tool>
         <Tool label="Text style" active={flags.heading} onClick={() => toggleMenu('style')}><Type size={15} /></Tool>
-        <Tool label="Blockquote" active={flags.quote} onClick={() => run(chain => chain.toggleBlockquote())}><Quote size={15} /></Tool>
+        <Tool label="Blockquote" action="quote" active={flags.quote} onClick={() => run(formattingActions.quote.command)}><Quote size={15} /></Tool>
         <i className="tool-separator" />
-        {actions.map(([label, Icon, flag, command]) => <Tool key={label} label={label} active={flags[flag]} onClick={() => run(command)}><Icon size={14} /></Tool>)}
-        <Tool label="Edit link" active={flags.link} onClick={openLink}><Link2 size={15} /></Tool>
+        {actions.map(([label, Icon, flag]) => <Tool key={label} label={label} action={flag} active={flags[flag]} onClick={() => run(formattingActions[flag].command)}><Icon size={14} /></Tool>)}
+        <Tool label="Edit link" action="link" active={flags.link} onClick={openLink}><Link2 size={15} /></Tool>
         <i className="tool-separator" />
-        <Tool label="Inline code" active={flags.code} onClick={() => run(chain => chain.toggleCode())}><Code2 size={15} /></Tool>
-        <Tool label="Code block" active={flags.codeBlock} onClick={() => run(chain => chain.toggleCodeBlock())}><Braces size={14} /></Tool>
-        <Tool label="Clear formatting" onClick={() => run(chain => chain.unsetAllMarks().clearNodes())}><Eraser size={15} /></Tool>
+        <Tool label="Inline code" action="code" active={flags.code} onClick={() => run(formattingActions.code.command)}><Code2 size={15} /></Tool>
+        <Tool label="Code block" action="codeBlock" active={flags.codeBlock} onClick={() => run(formattingActions.codeBlock.command)}><Braces size={14} /></Tool>
+        <Tool label="Clear formatting" action="clear" onClick={() => run(formattingActions.clear.command)}><Eraser size={15} /></Tool>
       </div>
       {menu === 'lists' && <div className="bubble-submenu" role="group" aria-label="List styles">
-        <Tool label="Bullet list" active={editor.isActive('bulletList')} onClick={() => run(chain => chain.toggleBulletList())}><List size={15} />Bullet list</Tool>
-        <Tool label="Numbered list" active={editor.isActive('orderedList')} onClick={() => run(chain => chain.toggleOrderedList())}><ListOrdered size={15} />Numbered list</Tool>
-        <Tool label="Checklist" active={editor.isActive('taskList')} onClick={() => run(chain => chain.toggleTaskList())}><ListTodo size={15} />Checklist</Tool>
+        <Tool label="Bullet list" action="bulletList" active={editor.isActive('bulletList')} onClick={() => run(formattingActions.bulletList.command)}><List size={15} />Bullet list</Tool>
+        <Tool label="Numbered list" action="orderedList" active={editor.isActive('orderedList')} onClick={() => run(formattingActions.orderedList.command)}><ListOrdered size={15} />Numbered list</Tool>
+        <Tool label="Checklist" action="taskList" active={editor.isActive('taskList')} onClick={() => run(formattingActions.taskList.command)}><ListTodo size={15} />Checklist</Tool>
       </div>}
       {menu === 'style' && <div className="bubble-submenu text-styles" role="group" aria-label="Text styles">
-        <Tool label="Paragraph" active={editor.isActive('paragraph')} onClick={() => run(chain => chain.setParagraph())}>Text</Tool>
-        {[1,2,3,4,5,6].map(level => <Tool key={level} label={`Heading ${level}`} active={editor.isActive('heading', {level})} onClick={() => run(chain => chain.toggleHeading({level}))}>H{level}</Tool>)}
+        <Tool label="Paragraph" action="paragraph" active={editor.isActive('paragraph')} onClick={() => run(formattingActions.paragraph.command)}>Text</Tool>
+        {[1,2,3,4,5,6].map(level => <Tool key={level} label={`Heading ${level}`} action={`heading${level}`} active={editor.isActive('heading', {level})} onClick={() => run(formattingActions[`heading${level}`].command)}>H{level}</Tool>)}
       </div>}
       {menu === 'link' && <form className="bubble-link" onSubmit={applyLink}>
-        <input autoFocus aria-label="Link URL" placeholder={cxtasksLinks ? "URL, document path, or T42" : "URL or document path"} value={link} onChange={e => setLink(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); setMenu(null); editor.commands.focus(); } }} />
-        <button type="submit" aria-label="Apply link" title="Apply link"><Check size={15} /></button>
-        {flags.link && <Tool label="Remove link" onClick={() => run(chain => chain.extendMarkRange('link').unsetLink())}><X size={15} /></Tool>}
+        <input ref={linkInput} aria-label="Link URL" placeholder={cxtasksLinks ? "URL, document path, or T42" : "URL or document path"} value={link} onChange={e => setLink(e.target.value)} onKeyDown={e => {
+          if (e.nativeEvent.isComposing) return;
+          if (e.key === 'Enter') { e.stopPropagation(); applyLink(e); }
+          else if (e.key === 'Escape' || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k')) {
+            e.preventDefault(); e.stopPropagation();
+            if (e.key !== 'Escape' && e.shiftKey) run(formattingActions.unlink.command);
+            else { setMenu(null); editor.commands.focus(); }
+          }
+        }} />
+        <Tool type="submit" label="Apply link" action="applyLink"><Check size={15} /></Tool>
+        {flags.link && <Tool label="Remove link" action="unlink" onClick={() => run(formattingActions.unlink.command)}><X size={15} /></Tool>}
         {linkError && <small role="alert">{linkError}</small>}
       </form>}
     </BubbleMenu>}

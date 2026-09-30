@@ -41,7 +41,7 @@
 :root[data-material=glass] .note-card:not(.color-paper) .card-actions .icon-button,
 :root[data-material=glass] .note-card:not(.color-paper) .pinned-icon { color: color-mix(in srgb, var(--text) 90%, transparent); }
 :root[data-material=glass] .pinned-icon { color: var(--hue-amber); }
-:root[data-material=glass] .panel-save-status i, :root[data-material=glass] .local-badge i { background: var(--hue-green); }
+:root[data-material=glass] .local-badge i { background: var(--hue-green); }
 :root[data-material=glass] .search-box { background: color-mix(in srgb, var(--surface) 60%, transparent); }
 :root[data-material=glass] .search-box kbd { background: var(--soft); }
 :root[data-material=glass] .overlay { background: var(--bg); }

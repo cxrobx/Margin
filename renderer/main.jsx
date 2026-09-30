@@ -280,14 +280,14 @@ const Editor = React.forwardRef(function Editor({ initial, focus, folders, close
   </article>;
 });
 
-function Connections({ close, act }) {
+function Connections({ back, act }) {
   const [info, setInfo] = useState(null);
   const [tab, setTab] = useState('codex');
   const [copied, setCopied] = useState(false);
   useEffect(() => { api.connections().then(result => result.ok && setInfo(result.value)); }, []);
   const labels = { codex: 'Codex', claude: 'Claude Code', claudeDesktop: 'Claude Desktop' };
   return <section className="overlay connection-overlay" role="dialog" aria-modal="true" aria-label="Connect assistants">
-    <div className="overlay-top"><IconButton label="Back to notes" onClick={close}><ArrowLeft size={19} /></IconButton><span>Connect assistants</span><span className="local-badge"><i />Local MCP</span></div>
+    <div className="overlay-top"><IconButton label="Back to preferences" onClick={back}><ArrowLeft size={19} /></IconButton><span>Connect assistants</span><span className="local-badge"><i />Local MCP</span></div>
     <div className="connection-content"><div className="connection-emblem"><Sparkles size={29} strokeWidth={1.5} /></div><h1>Good thoughts.<br />Better together.</h1><p>Give your assistant a place to leave notes, links, tasks, and the things worth keeping.</p>
       <div className="connection-tabs">{Object.entries(labels).map(([value, label]) => <button key={value} className={tab === value ? 'selected' : ''} onClick={() => { setTab(value); setCopied(false); }}>{label}</button>)}</div>
       <div className="setup-step"><span className="step-number">1</span><div><h3>{tab === 'claudeDesktop' ? 'Add to your MCP configuration' : 'Run this once in Terminal'}</h3><p>{tab === 'claudeDesktop' ? <>Merge the <code>margin</code> entry into <code>claude_desktop_config.json</code>, under <code>mcpServers</code>.</> : `Registers Margin with ${labels[tab]} using the same notebook as this app.`}</p></div></div>
@@ -300,7 +300,7 @@ function Connections({ close, act }) {
   </section>;
 }
 
-function Preferences({ state, hasCXTasks, close, act, showActivity, showThemes, showBackups, changeDemo, resetNotebook }) {
+function Preferences({ state, hasCXTasks, close, act, showActivity, showThemes, showConnections, showBackups, changeDemo, resetNotebook }) {
   const [busy, setBusy] = useState(false);
   const [confirmReset, setConfirmReset] = useState(null);
   useEffect(() => { if (confirmReset) document.querySelector('[aria-label="Confirm reset notebook"]')?.focus(); }, [confirmReset]);
@@ -316,9 +316,10 @@ function Preferences({ state, hasCXTasks, close, act, showActivity, showThemes, 
       <label className="pref-row"><div><strong>Screen edge</strong><small>Where Margin feels at home</small></div><select value={state.settings.edge} onChange={e => setting({ edge: e.target.value })}><option value="right">Right</option><option value="left">Left</option></select></label>
       <button className="pref-action theme-pref" aria-label="Themes" onClick={showThemes}><Palette size={17} /><span><strong>Themes</strong><small>{state.settings.themeId === 'vault' ? 'Match vault' : (state.settings.themeId === GLASS_THEME.id ? GLASS_THEME.name : state.themes.find(t => t.id === state.settings.themeId)?.name || 'Default')} · {state.settings.themeId === 'vault' ? 'Follows Obsidian' : state.settings.theme}</small></span><ChevronRight size={15} /></button>
     </div><div className="pref-group"><h3>Your notebook</h3><button className="pref-action" onClick={() => act(api.export(), 'Backup exported')}><Download size={17} />Export notes and attachments<ChevronRight size={15} /></button><button className="pref-action" onClick={showBackups}><Undo2 size={17} />Backups &amp; import<ChevronRight size={15} /></button><button className="pref-action" onClick={() => act(api.importMarkdown('inbox'), 'Markdown imported')}><FileText size={17} />Import Markdown files…<ChevronRight size={15} /></button><button className="pref-action" onClick={() => act(api.importMarkdown('inbox', true), 'Markdown imported')}><FolderPlus size={17} />Import Markdown folder…<ChevronRight size={15} /></button><button className="pref-action" onClick={() => act(api.exportMarkdown(), 'Markdown exported')}><Download size={17} />Export notebook as Markdown…<ChevronRight size={15} /></button><button className="pref-action" onClick={() => act(api.showData())}><Folder size={17} />Open local data folder<ChevronRight size={15} /></button><button className="pref-action" onClick={showActivity}><Sparkles size={17} />Recent activity<ChevronRight size={15} /></button><p className="pref-caption">Margin keeps the last 40 saved versions in your data folder’s backups directory. Export includes your attachments.</p></div>
-    {hasCXTasks && <div className="pref-group"><h3>Integrations</h3>
-      <label className="pref-row"><div><strong>Enable CXTasks links</strong><small>Open T42 references in CXTasks</small></div><input aria-label="Enable CXTasks links" type="checkbox" checked={state.settings.cxtasksLinks} onChange={e => setting({ cxtasksLinks: e.target.checked })} /></label>
-    </div>}
+    <div className="pref-group"><h3>Integrations</h3>
+      <button className="pref-action notebook-pref" aria-label="Assistants" onClick={showConnections}><Sparkles size={17} /><span><strong>Assistants</strong><small>Connect Codex or Claude to your notes</small></span><ChevronRight size={15} /></button>
+      {hasCXTasks && <label className="pref-row"><div><strong>Enable CXTasks links</strong><small>Open T42 references in CXTasks</small></div><input aria-label="Enable CXTasks links" type="checkbox" checked={state.settings.cxtasksLinks} onChange={e => setting({ cxtasksLinks: e.target.checked })} /></label>}
+    </div>
     <div className="pref-group"><h3>Demo & reset</h3>
       <button className="pref-action notebook-pref" aria-label={state.demo ? 'Exit demo mode' : 'Start demo mode'} disabled={busy} onClick={toggleDemo}><Sparkles size={17} /><span><strong>{state.demo ? 'Exit demo mode' : 'Start demo mode'}</strong><small>{state.demo ? 'Discard demo content and return to your notebook' : 'Explore Margin with sample notes'}</small></span><ChevronRight size={15} /></button>
       <button className="pref-action notebook-pref" aria-label="Reset to default" disabled={busy || Boolean(state.demo)} onClick={() => setConfirmReset({ revision: state.revision, count: state.notes.length })}><Trash2 size={17} /><span><strong>Reset to default</strong><small>Start over with an empty notebook</small></span><ChevronRight size={15} /></button>
@@ -466,12 +467,12 @@ function App() {
     const listener = () => applyAppearance(state, media.matches, reducedTransparency);
     listener();
     media.addEventListener('change', listener); return () => media.removeEventListener('change', listener);
-  }, [state?.settings.theme, state?.settings.themeId, state?.settings.glassTransparency, state?.themes, state?.vaultTheme, reducedTransparency]);
+  }, [state?.settings.theme, state?.settings.themeId, state?.settings.glassTransparency, state?.settings.themeSaturation, state?.themes, state?.vaultTheme, reducedTransparency]);
   useEffect(() => {
     const listener = e => {
       if (iconTarget || e.defaultPrevented) return;
       if ((e.metaKey || e.ctrlKey) && e.key === 'f') { e.preventDefault(); if (!overlay) searchRef.current?.focus(); }
-      if (e.key === 'Escape' && !e.defaultPrevented && overlay) close();
+      if (e.key === 'Escape' && !e.defaultPrevented && overlay) { if (overlay === 'connections') setOverlay('settings'); else close(); }
       else if (e.key === 'Escape' && !e.defaultPrevented && !overlay && !folderDialog && !editor) api?.hide();
       if (e.key === 'Tab' && (overlay || folderDialog)) {
         const container = document.querySelector('[role=alertdialog]') || document.querySelector('.folder-dialog') || document.querySelector('.overlay');
@@ -557,9 +558,9 @@ function App() {
       {filter === 'trash' && <p className="trash-caption">Deleted notes stay here until you restore them.</p>}
       {listItems.length ? listItems.map(note => note.divider ? <SectionDivider key={note.id} divider={note} act={act} api={api} reorder={reorder} noteIds={noteIds} editing={editingDivider === note.id} setEditing={setEditingDivider} openMenu={dividerMenu} /> : note.editing ? <Editor key={editor.key} ref={editingSession} initial={editor.initial} focus={editor.focus} folders={state.folders} close={() => finishEditor(editor.key)} act={act} draftKey={draftKey} onIdentityChange={id => setEditorId(id || null)} folderTint={folderTint} chooseIcon={chooseNoteIcon} suspended={Boolean(iconTarget || overlay || folderDialog)} /> : <NoteCard key={note.id} note={note} folder={state.folders.find(f => f.id === note.folderId)} edit={openEditor} act={act} trashView={filter === 'trash'} reorder={reorder} noteIds={noteIds} chooseIcon={chooseNoteIcon} query={query.trim()} showHistory={note => { setHistoryNote(note); setOverlay('history'); }} folderTint={folderTint(state.folders.find(f => f.id === note.folderId))} />) : <div className="empty-state"><span><FileText size={26} strokeWidth={1} /></span><h3>{query ? 'A thought yet to be found.' : filter === 'trash' ? 'A clean little corner.' : filter === 'pinned' ? 'Keep the good things close.' : 'Room for a new thought.'}</h3><p>{query ? 'Try another word or look in all notes.' : filter === 'pinned' ? 'Pin a note from its menu to find it here.' : filter === 'trash' ? 'Notes you remove will appear here.' : 'A blank page is a lovely place to start.'}</p>{!query && !['trash', 'pinned'].includes(filter) && <button onClick={addNote}>Write a note<ArrowRight size={14} /></button>}</div>}
     </div>
-    <div className="bottom-area"><button className="new-note" onClick={addNote}><span><Plus size={17} />Jot something down</span><kbd>⌘ N</kbd></button><footer className="panel-tools"><button className="connect-banner" aria-label="Connect assistants" onClick={() => setOverlay('connections')}><Sparkles size={15} strokeWidth={1.6} /><span>Assistants</span></button><span className="panel-save-status"><i />Saved locally</span><IconButton label="Recent activity" onClick={() => setOverlay('activity')}><MoreHorizontal size={17} /></IconButton><IconButton label="Preferences" onClick={() => setOverlay('settings')}><Settings size={17} strokeWidth={1.6} /></IconButton></footer></div>
-    {overlay === 'connections' && <Connections close={close} act={act} />}
-    {overlay === 'settings' && <Preferences state={state} hasCXTasks={linkApps.cxtasks} close={close} act={act} showActivity={() => setOverlay('activity')} showThemes={() => setOverlay('themes')} showBackups={() => setOverlay('backups')} changeDemo={changeDemo} resetNotebook={resetNotebook} />}
+    <div className="bottom-area"><button className="new-note" onClick={addNote}><span><Plus size={17} />Jot something down</span><kbd>⌘ N</kbd></button><footer className="panel-tools"><IconButton label="Recent activity" onClick={() => setOverlay('activity')}><MoreHorizontal size={17} /></IconButton><IconButton label="Preferences" onClick={() => setOverlay('settings')}><Settings size={17} strokeWidth={1.6} /></IconButton></footer></div>
+    {overlay === 'connections' && <Connections back={() => setOverlay('settings')} act={act} />}
+    {overlay === 'settings' && <Preferences state={state} hasCXTasks={linkApps.cxtasks} close={close} act={act} showActivity={() => setOverlay('activity')} showThemes={() => setOverlay('themes')} showConnections={() => setOverlay('connections')} showBackups={() => setOverlay('backups')} changeDemo={changeDemo} resetNotebook={resetNotebook} />}
     {overlay === 'history' && historyNote && <NoteHistory note={historyNote} api={api} act={act} close={close} Markdown={Markdown} />}
     {overlay === 'backups' && <BackupTools api={api} act={act} close={close} demo={Boolean(state.demo)} Markdown={Markdown} />}
     {overlay === 'themes' && <Themes state={state} api={api} act={act} reducedTransparency={reducedTransparency} back={() => setOverlay('settings')} />}

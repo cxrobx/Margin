@@ -196,7 +196,23 @@ export function paletteTokens(p) {
   return Object.fromEntries(Object.entries(colors).map(([key, color]) => [key, cssColor(color)]));
 }
 
+// Scale colour intensity while preserving perceptual lightness, hue and alpha.
+// The renderer resolves relative colours; the stored theme stays unchanged.
+export function saturatedColour(color, saturation = 1) {
+  return saturation === 1 || !/^(?:#[a-f0-9]{6}$|rgb\()/i.test(color) ? color : `oklch(from ${color} l calc(c * ${saturation}) h)`;
+}
+export function saturatedTokens(tokens, saturation = 1) {
+  return Object.fromEntries(Object.entries(tokens).map(([key, value]) => [key, saturatedColour(value, saturation)]));
+}
 export function resolveAppearance(state, systemDark, reducedTransparency = false) {
+  const appearance = baseAppearance(state, systemDark, reducedTransparency);
+  const saturation = state.settings.themeSaturation ?? 1;
+  if (saturation === 1) return appearance;
+  return { ...appearance, tokens: saturatedTokens(appearance.tokens, saturation),
+    folderColours: appearance.folderColours?.map(folder => ({ ...folder, color: saturatedColour(folder.color, saturation) })) };
+}
+
+function baseAppearance(state, systemDark, reducedTransparency = false) {
   const requestedMode = state.settings.theme === 'system' ? (systemDark ? 'dark' : 'light') : state.settings.theme;
   const id = state.settings.themeId;
   if (id === GLASS_THEME.id) {
