@@ -1,0 +1,53 @@
+/* CXTasks material: independently tinted chrome and content over native blur. */
+.panel-chrome { flex-shrink: 0; }
+.folder-glyph, .heading-glyph { display: none; }
+:root[data-material=glass] .app-shell { background: transparent; border-color: var(--line); }
+:root[data-material=glass] .panel-chrome, :root[data-material=glass] .bottom-area { background: rgb(var(--glass-sidebar-rgb) / var(--glass-sidebar-alpha)); }
+:root[data-material=glass] .notes-scroll { background: rgb(var(--glass-pane-rgb) / var(--glass-pane-alpha)); padding-top: 13px; }
+:root[data-material=glass] .folders { border-bottom: 0; }
+:root[data-material=glass] .section-heading { border-bottom: 1px solid var(--glass-rim-hover); }
+:root[data-material=glass] .folders > button { color: var(--text); }
+:root[data-material=glass] .folders > button.selected { background: var(--soft); color: var(--text); }
+:root[data-material=glass] .folder-dot { display: none; }
+:root[data-material=glass] .folder-glyph { display: inline-flex; }
+:root[data-material=glass] .heading-glyph { display: block; flex-shrink: 0; }
+:root[data-material=glass] .hue-blue { --section-hue: var(--hue-blue); }
+:root[data-material=glass] .hue-teal { --section-hue: var(--hue-teal); }
+:root[data-material=glass] .hue-green { --section-hue: var(--hue-green); }
+:root[data-material=glass] .hue-amber { --section-hue: var(--hue-amber); }
+:root[data-material=glass] .hue-red { --section-hue: var(--hue-red); }
+:root[data-material=glass] .hue-purple { --section-hue: var(--hue-purple); }
+:root[data-material=glass] .folders > button > svg, :root[data-material=glass] .folder-glyph, :root[data-material=glass] .heading-glyph, :root[data-material=glass] .note-type > svg { color: color-mix(in srgb, var(--section-hue) 55%, var(--text)); }
+:root[data-material=glass] .section-heading .count { color: var(--muted); background: var(--soft); }
+:root[data-material=glass] .section-heading .active { color: var(--hue-amber); }
+:root[data-material=glass] .note-card { background: rgb(var(--glass-card-rgb) / var(--glass-card-alpha)); border: 1px solid transparent; box-shadow: inset 0 0 0 1px var(--glass-rim); transition: background .3s, box-shadow .3s; }
+:root[data-material=glass] .note-card:hover { background: rgb(var(--glass-card-rgb) / var(--glass-card-hover-alpha)); box-shadow: inset 0 0 0 1px var(--glass-rim-hover), 0 0 24px var(--glass-rim); }
+:root[data-material=glass] :is(.note-card, .swatch).color-sage { --note-hue: var(--hue-green); }
+:root[data-material=glass] :is(.note-card, .swatch).color-sand { --note-hue: var(--hue-amber); }
+:root[data-material=glass] :is(.note-card, .swatch).color-rose { --note-hue: var(--hue-red); }
+:root[data-material=glass] :is(.note-card, .swatch).color-lavender { --note-hue: var(--hue-purple); }
+:root[data-material=glass] :is(.note-card, .swatch).color-sky { --note-hue: var(--hue-blue); }
+/* A selected note colour fills the whole card and stays visible on hover. */
+:root[data-material=glass] .note-card:not(.color-paper),
+:root[data-material=glass] .swatch:not(.color-paper) {
+  background: color-mix(in srgb, var(--note-hue) 45%, var(--paper));
+}
+:root[data-material=glass] .note-card:not(.color-paper) .markdown,
+:root[data-material=glass] .note-card:not(.color-paper) .markdown a,
+:root[data-material=glass] .note-card:not(.color-paper) .markdown blockquote,
+:root[data-material=glass] .note-card:not(.color-paper) .card-title:hover { color: var(--text); }
+:root[data-material=glass] .note-card:not(.color-paper) .note-type,
+:root[data-material=glass] .note-card:not(.color-paper) .card-footer,
+:root[data-material=glass] .note-card:not(.color-paper) .card-actions .icon-button,
+:root[data-material=glass] .note-card:not(.color-paper) .pinned-icon { color: color-mix(in srgb, var(--text) 90%, transparent); }
+:root[data-material=glass] .pinned-icon { color: var(--hue-amber); }
+:root[data-material=glass] .panel-save-status i, :root[data-material=glass] .local-badge i { background: var(--hue-green); }
+:root[data-material=glass] .search-box { background: color-mix(in srgb, var(--surface) 60%, transparent); }
+:root[data-material=glass] .search-box kbd { background: var(--soft); }
+:root[data-material=glass] .overlay { background: var(--bg); }
+:root[data-material=glass] .overlay-top { background: rgb(var(--glass-sidebar-rgb)); }
+:root[data-material=glass] .new-note { border: 1px solid var(--glass-rim-hover); background: var(--soft); }
+:root[data-material=glass] .empty-state h3, :root[data-material=glass] .confirm-sheet h3 { font-family: var(--ui-font); }
+@media (prefers-reduced-motion: reduce) { :root[data-material=glass] .note-card { transition: none; } }
+
+:root[data-material=glass] .note-type > svg { color: var(--muted); }

@@ -1,0 +1,43 @@
+:root {
+  --icon-blue: var(--hue-blue, #007aff); --icon-red: var(--hue-red, #ff3b30);
+  --icon-green: var(--hue-green, #1eb43c); --icon-orange: #f28b00;
+  --icon-amber: var(--hue-amber, #e6a200); --icon-purple: var(--hue-purple, #af52de);
+  --icon-teal: var(--hue-teal, #12a6c0); --icon-pink: #e64b83;
+  --icon-sand: var(--hue-sand, #a2845e); --icon-grey: #8e8e93;
+}
+:root[data-theme=dark] { --icon-blue: var(--hue-blue, #0a84ff); --icon-red: var(--hue-red, #ff453a); --icon-green: var(--hue-green, #30d158); --icon-amber: var(--hue-amber, #ffd60a); --icon-purple: var(--hue-purple, #bf5af2); --icon-teal: var(--hue-teal, #40c8e0); --icon-orange: #ff9f0a; --icon-pink: #ff6482; --icon-grey: #98989d; }
+.node-icon { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; line-height: 0; }
+.node-icon img { display: block; border-radius: 3px; object-fit: contain; }
+.node-icon.folder-glyph, .node-icon.heading-glyph { display: inline-flex; }
+.folders .folder-dot { display: none; }
+.icon-picker-backdrop { position: absolute; inset: 0; z-index: 25; background: #00000008; display: flex; align-items: flex-start; justify-content: center; padding: 72px 14px 16px; }
+.icon-picker { width: 316px; max-width: 100%; max-height: 100%; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; padding: 13px; background: var(--surface); box-shadow: 0 12px 40px #0003; }
+.icon-picker header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.icon-picker header > div { min-width: 0; }
+.icon-picker h2 { font-size: 13px; font-weight: 600; margin: 2px 0 4px; }
+.icon-picker header p { font-size: 11px; color: var(--muted); margin: 0; overflow-wrap: anywhere; }
+.icon-picker h3 { font-size: 10px; letter-spacing: .5px; text-transform: uppercase; margin: 16px 0 8px; color: var(--muted); }
+.icon-picker h3 span { font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: 5px; font-size: 9px; }
+.icon-picker-preview { display: flex; align-items: center; gap: 10px; padding: 12px 9px; margin: 12px 0 8px; background: var(--soft); border-radius: 7px; font-size: 11px; }
+.icon-picker-preview > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon-saving { margin-left: auto; flex-shrink: 0; animation: icon-spin 1s linear infinite; }
+@keyframes icon-spin { to { transform: rotate(360deg); } }
+.icon-choose-image { border: 1px dashed var(--line); border-radius: 7px; padding: 8px; width: 100%; display: flex; justify-content: center; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+.icon-glyph-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
+.icon-glyph-grid button { min-width: 0; height: 32px; border-radius: 6px; padding: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+.icon-glyph-grid button:hover, .icon-choose-image:hover, .icon-picker footer button:hover { background: var(--soft); }
+.icon-glyph-grid button[aria-pressed=true] { background: var(--soft); box-shadow: inset 0 0 0 1px var(--green); color: var(--green); }
+.icon-color-grid { display: flex; flex-wrap: wrap; gap: 7px; padding: 3px; }
+.icon-color-grid button { width: 19px; height: 19px; border-radius: 50%; padding: 0; border: 1px solid color-mix(in srgb, var(--text) 12%, transparent); }
+.icon-color-auto { font-size: 9px; color: var(--muted); }
+.icon-color-grid button[aria-pressed=true] { outline: 2px solid var(--green); outline-offset: 2px; }
+.icon-image-grid { display: flex; gap: 6px; margin-top: 8px; }
+.icon-image-grid button { border: 1px solid var(--line); border-radius: 7px; padding: 8px; flex: 1; background: var(--soft); }
+.icon-image-grid img { width: 32px; height: 32px; object-fit: contain; }
+.icon-image-grid span { display: block; font-size: 9px; color: var(--muted); margin-top: 5px; }
+.icon-image-grid button[aria-pressed=true] { border-color: var(--green); }
+.icon-picker footer { display: flex; align-items: center; justify-content: space-between; gap: 6px; border-top: 1px solid var(--line); margin-top: 15px; padding-top: 9px; }
+.icon-picker footer span { font-size: 9px; color: var(--muted); }
+.icon-picker footer button { padding: 5px 7px; border-radius: 5px; font-size: 10px; color: var(--muted); }
+.icon-picker-error { color: #ae6659; font-size: 11px; line-height: 1.6; }
+.editor-icon-button { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; margin: -8px 0 15px; font-size: 10px; color: var(--muted); }

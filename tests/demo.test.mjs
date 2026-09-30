@@ -1,0 +1,100 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { promises as fs } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { NoteStore } from '../shared/store.mjs';
+
+async function fixture(t) {
+  const dir = await fs.mkdtemp(path.join(tmpdir(), 'margin-demo-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  return { dir, store: await new NoteStore(dir).init() };
+}
+const content = state => Object.fromEntries(['notebookId', 'notes', 'folders', 'noteOrder', 'tabOrder', 'activity', 'sectionAppearances'].map(key => [key, state[key]]));
+
+test('new notebooks are empty and older notebooks keep their content without a rewrite', async t => {
+  const { store } = await fixture(t);
+  const state = await store.read();
+  assert.equal(state.demo, null);
+  assert.deepEqual(state.notes, []);
+  assert.deepEqual(state.folders.map(f => f.id), ['inbox', 'work', 'personal']);
+  await store.create({ title: 'Legacy note' });
+  const legacy = await store.read(); delete legacy.demo; delete legacy.notebookId;
+  await fs.writeFile(store.file, JSON.stringify(legacy));
+  const before = await fs.readFile(store.file, 'utf8');
+  const reopened = await new NoteStore(store.dir).init();
+  assert.equal((await reopened.read()).notebookId, 'main');
+  assert.deepEqual((await reopened.read()).notes, legacy.notes);
+  assert.equal(await fs.readFile(store.file, 'utf8'), before);
+});
+
+test('demo survives reopening, isolates edits and attachments, and restores the full regular notebook', async t => {
+  const { dir, store } = await fixture(t);
+  const folder = await store.createFolder('Real project', 'sky');
+  const normal = await store.create({ title: 'Private note', body: 'Keep this', folderId: folder.id });
+  const trashed = await store.create({ title: 'Real Trash' }); await store.trash(trashed.id);
+  const original = path.join(dir, 'input.txt'); await fs.writeFile(original, 'Regular attachment');
+  const attached = await store.attach(normal.id, original);
+  const second = await store.create({ title: 'Another regular note' });
+  await store.reorderNote(second.id, normal.id, 'before');
+  await store.reorderTab(folder.id, 'all', 'before');
+  const before = content(await store.read());
+  await store.setDemoMode(true);
+  const demo = await store.read();
+  assert.notEqual(demo.notebookId, before.notebookId);
+  assert.equal(demo.notes.length, 6);
+  assert.deepEqual(new Set(demo.notes.map(n => n.kind)), new Set(['note', 'checklist', 'code', 'link']));
+  assert.deepEqual(demo.demo.normal, before);
+  await assert.rejects(() => store.get(normal.id), /not found/);
+  await assert.rejects(() => store.attachmentPath(attached.attachments[0].id), /not found/);
+  await store.setDemoMode(true);
+  assert.equal((await store.read()).notebookId, demo.notebookId, 'Repeated activation must not replace the saved regular notebook');
+  const reopened = await new NoteStore(dir).init();
+  const transient = await reopened.create({ title: 'Transient demo input', source: 'Codex' });
+  const demoFile = await reopened.attach(transient.id, original);
+  await reopened.append(demo.notes[0].id, 'Demo edit', 'Claude');
+  await reopened.setSettings({ theme: 'dark', themeId: 'cxtasks-glass' });
+  const demoRevision = (await reopened.read()).revision;
+  await assert.rejects(() => reopened.resetNotebook(demoRevision), /Leave demo mode/);
+  await reopened.setDemoMode(false);
+  const restored = await store.read();
+  assert.equal(restored.demo, null);
+  assert.deepEqual(content(restored), before);
+  assert.equal(restored.settings.themeId, 'cxtasks-glass');
+  assert.equal(await fs.readFile((await store.attachmentPath(attached.attachments[0].id)).path, 'utf8'), 'Regular attachment');
+  await assert.rejects(() => store.get(transient.id), /not found/);
+  await assert.rejects(() => store.attachmentPath(demoFile.attachments[0].id), /not found/);
+  await store.setDemoMode(true);
+  assert.notEqual((await store.read()).notes[0].id, demo.notes[0].id, 'Every demo begins with fresh samples');
+  await store.setDemoMode(false);
+  assert.deepEqual(content(await store.read()), before);
+});
+
+test('reset clears notes, Trash, orders and activity, retains appearance, backs up data, and rejects stale confirmation', async t => {
+  const { dir, store } = await fixture(t);
+  const folder = await store.createFolder('Extra folder');
+  const note = await store.create({ title: 'Before reset', folderId: folder.id });
+  const trash = await store.create({ title: 'Also clear Trash' });
+  await store.reorderNote(trash.id, note.id, 'before'); await store.trash(trash.id);
+  await store.reorderTab(folder.id, 'all', 'before');
+  await store.setSettings({ theme: 'dark', themeId: 'cxtasks-glass', edge: 'left', glassTransparency: .2 });
+  const confirmation = await store.read();
+  const other = await new NoteStore(dir).init();
+  await other.append(note.id, 'Concurrent input', 'Codex');
+  const before = await store.read();
+  await assert.rejects(() => store.resetNotebook(confirmation.revision), /notebook changed/);
+  assert.deepEqual(await store.read(), before);
+  const result = await store.resetNotebook(before.revision);
+  assert.equal(result.removedNotes, 2);
+  const reset = await store.read();
+  assert.equal(reset.demo, null);
+  assert.notEqual(reset.notebookId, before.notebookId);
+  for (const field of ['notes', 'noteOrder', 'tabOrder', 'activity']) assert.deepEqual(reset[field], []);
+  assert.deepEqual(reset.sectionAppearances, {});
+  assert.deepEqual(reset.folders.map(f => f.id), ['inbox', 'work', 'personal']);
+  for (const field of ['settings', 'themes', 'vaultTheme']) assert.deepEqual(reset[field], before[field]);
+  const backups = await Promise.all((await fs.readdir(path.join(dir, 'backups'))).map(name => fs.readFile(path.join(dir, 'backups', name), 'utf8').then(JSON.parse)));
+  assert.ok(backups.some(state => JSON.stringify(state.notes) === JSON.stringify(before.notes)));
+  const reopened = await new NoteStore(dir).init();
+  assert.equal((await reopened.list()).total, 0, 'Reopening must not reintroduce samples');
+});

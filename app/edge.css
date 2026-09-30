@@ -1,0 +1,8 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+button { width: 100%; height: 100%; padding: 0; border: 0; cursor: pointer; background: transparent; display: flex; justify-content: flex-end; align-items: center; }
+button span { width: 5px; height: 58px; border-radius: 5px 0 0 5px; background: rgba(106, 124, 112, .78); box-shadow: 0 0 0 1px rgba(255,255,255,.2); transition: width .15s, height .15s; }
+button:hover span { width: 9px; height: 72px; background: rgba(88, 113, 98, .95); }
+body.left button { justify-content: flex-start; }
+body.left button span { border-radius: 0 5px 5px 0; }
+@media (prefers-reduced-motion: reduce) { button span { transition: none; } }

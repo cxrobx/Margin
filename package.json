@@ -1,0 +1,99 @@
+{
+  "name": "margin-notes",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A quiet screen-edge notebook with a local MCP server.",
+  "type": "module",
+  "main": "app/main.mjs",
+  "scripts": {
+    "dev": "npm run build:native && node scripts/dev.mjs",
+    "build": "npm run build:native && vite build",
+    "start": "npm run build && electron .",
+    "mcp": "node server/index.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "package": "npm run build && electron-builder --mac dir",
+    "connections": "node scripts/connections.mjs",
+    "build:native": "node scripts/build-native.mjs",
+    "alfred": "python3 scripts/build-alfred.py",
+    "icon": "swift scripts/icon.swift"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "proper-lockfile": "^4.1.2",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@tiptap/extension-highlight": "^3.31.3",
+    "@tiptap/extension-image": "^3.31.3",
+    "@tiptap/extension-placeholder": "^3.31.3",
+    "@tiptap/extension-table": "^3.31.3",
+    "@tiptap/extension-task-item": "^3.31.3",
+    "@tiptap/extension-task-list": "^3.31.3",
+    "@tiptap/extension-underline": "^3.31.3",
+    "@tiptap/markdown": "^3.31.3",
+    "@tiptap/react": "^3.31.3",
+    "@tiptap/starter-kit": "^3.31.3",
+    "@vitejs/plugin-react": "^5.0.0",
+    "electron": "^44.5.0",
+    "electron-builder": "^26.0.12",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
+    "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
+    "remark-gfm": "^4.0.1",
+    "vite": "^7.0.0"
+  },
+  "build": {
+    "appId": "local.margin.notes",
+    "productName": "Margin Notes",
+    "asar": false,
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "app/**",
+      "shared/**",
+      "server/**",
+      "dist/**",
+      "assets/**",
+      "scripts/smoke.mjs",
+      "scripts/rich-smoke.mjs",
+      "scripts/icons-smoke.mjs",
+      "package.json",
+      "scripts/capture.mjs",
+      "scripts/features-smoke.mjs",
+      "integrations/alfred/capture.js",
+      "scripts/links-smoke.mjs",
+      "LICENSE"
+    ],
+    "mac": {
+      "extendInfo": {
+        "LSUIElement": true
+      },
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.productivity",
+      "target": [
+        "dir"
+      ]
+    },
+    "protocols": [
+      {
+        "name": "Margin note links",
+        "schemes": [
+          "margin"
+        ]
+      }
+    ],
+    "copyright": "Copyright \u00a9 2026 CX Ventures LLC"
+  },
+  "license": "BUSL-1.1",
+  "author": "CX Ventures LLC",
+  "homepage": "https://github.com/cxrobx/Margin",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cxrobx/Margin.git"
+  }
+}

@@ -1,0 +1,45 @@
+/* Onyx's measured reading colours, scoped to live and saved vault palettes. */
+:root[data-material=vault] { --vault-heading-strength: 60%; --vault-folder-strength: 55%; --vault-link-strength: 75%; }
+:root[data-material=vault][data-theme=dark] { --vault-heading-strength: 100%; --vault-folder-strength: 100%; --vault-link-strength: 100%; }
+:root[data-material=vault] .hue-blue { --section-hue: var(--hue-blue); }
+:root[data-material=vault] .hue-red { --section-hue: var(--hue-red); }
+:root[data-material=vault] .hue-green { --section-hue: var(--hue-green); }
+:root[data-material=vault] .hue-amber { --section-hue: var(--hue-amber); }
+:root[data-material=vault] .hue-purple { --section-hue: var(--hue-purple); }
+:root[data-material=vault] .hue-teal { --section-hue: var(--hue-teal); }
+:root[data-material=vault] .panel-chrome, :root[data-material=vault] .bottom-area { background: var(--vault-sidebar); }
+:root[data-material=vault] .folder-glyph { display: inline-flex; }
+:root[data-material=vault] .heading-glyph { display: block; flex-shrink: 0; }
+:root[data-material=vault] .folders .folder-dot { display: none; }
+:root[data-material=vault] .folders > .folder-tab { color: var(--muted); }
+:root[data-material=vault] .folders > .folder-tab:hover, :root[data-material=vault] .folders > .folder-tab.selected { background: var(--soft); color: var(--text); }
+:root[data-material=vault] .section-heading { color: var(--text); }
+:root[data-material=vault] .section-heading .count { background: var(--soft); color: var(--muted); }
+:root[data-material=vault] .note-type > svg { color: var(--muted); }
+:root[data-material=vault] .note-type > .drag-grip { color: var(--muted); }
+:root[data-material=vault] .card-title, :root[data-material=vault] .editor-title { color: var(--text); }
+:root[data-material=vault] .markdown { color: var(--text); }
+:root[data-material=vault] .markdown h1 { color: color-mix(in srgb, var(--heading-1) var(--vault-heading-strength), var(--text)); }
+:root[data-material=vault] .markdown h2 { color: color-mix(in srgb, var(--heading-2) var(--vault-heading-strength), var(--text)); }
+:root[data-material=vault] .markdown h3 { color: color-mix(in srgb, var(--heading-3) var(--vault-heading-strength), var(--text)); }
+:root[data-material=vault] .markdown h4 { color: color-mix(in srgb, var(--heading-4) var(--vault-heading-strength), var(--text)); }
+:root[data-material=vault] .markdown h5 { color: color-mix(in srgb, var(--heading-5) var(--vault-heading-strength), var(--text)); }
+:root[data-material=vault] .markdown h6 { color: color-mix(in srgb, var(--heading-6) var(--vault-heading-strength), var(--text)); }
+:root[data-material=vault] .markdown a { color: color-mix(in srgb, var(--vault-link) var(--vault-link-strength), var(--text)); }
+:root[data-material=vault] .card-location { color: var(--muted); }
+:root[data-material=vault] .card-location .folder-dot { background: color-mix(in srgb, var(--vault-folder-color, var(--green)) 45%, var(--muted)); }
+:root[data-material=vault] .pinned-icon, :root[data-material=vault] .section-tools .active { color: color-mix(in srgb, var(--hue-amber) 55%, var(--text)); }
+
+:root[data-material=vault] .folder-glyph, :root[data-material=vault] .folders > .folder-tab > svg, :root[data-material=vault] .heading-glyph { color: color-mix(in srgb, var(--vault-folder-color, var(--section-hue)) var(--vault-folder-strength), var(--text)); }
+
+/* Picker colours communicate the hue without turning the whole note into a swatch. */
+:root[data-material=vault][data-theme=dark] .swatch.color-sage { --swatch-hue: var(--hue-green); }
+:root[data-material=vault][data-theme=dark] .swatch.color-sand { --swatch-hue: var(--hue-amber); }
+:root[data-material=vault][data-theme=dark] .swatch.color-rose { --swatch-hue: var(--hue-red); }
+:root[data-material=vault][data-theme=dark] .swatch.color-lavender { --swatch-hue: var(--hue-purple); }
+:root[data-material=vault][data-theme=dark] .swatch.color-sky { --swatch-hue: var(--hue-blue); }
+:root[data-material=vault][data-theme=dark] .swatch:not(.color-paper) {
+  background: var(--swatch-hue);
+  border-color: color-mix(in srgb, var(--swatch-hue) 85%, var(--paper));
+  color: var(--bg);
+}

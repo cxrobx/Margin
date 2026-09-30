@@ -1,0 +1,95 @@
+/* The desktop shell is an edge-anchored macOS panel, not a document window. */
+:root, body { background: transparent; }
+#root { overflow: hidden; }
+.app-shell {
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+}
+.main-header {
+  height: 62px;
+  flex-shrink: 0;
+  padding: 0 17px 0 20px;
+  -webkit-app-region: no-drag;
+}
+.main-header .brand {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -.4px;
+}
+.panel-header-actions { display: flex; align-items: center; gap: 6px; }
+.panel-header-actions .icon-button { width: 28px; height: 30px; }
+.search-box { margin: 0 17px 13px; height: 35px; }
+.folders { padding: 0 17px 12px; }
+.folders > button:not(.icon-button) { font-size: 11px; padding: 7px 8px; }
+.section-heading { padding: 13px 18px 11px; }
+.section-heading h2 { font-size: 12px; }
+.notes-scroll { padding: 0 17px 10px; }
+.note-card { padding: 11px 13px; }
+.card-title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; font-weight: 550; letter-spacing: -.15px; }
+.markdown { font-size: 12px; line-height: 1.65; }
+.note-type { font-size: 10px; }
+.card-footer { font-size: 9px; }
+.task-check { margin-top: 4px; }
+.bottom-area { padding: 10px 17px 0; background: transparent; }
+.new-note { height: 36px; font-size: 11px; color: var(--text); }
+.new-note:hover { color: var(--text); }
+.panel-tools { height: 45px; display: flex; align-items: center; gap: 5px; }
+.panel-tools .connect-banner {
+  width: auto;
+  background: transparent;
+  margin: 0;
+  border-radius: 6px;
+  padding: 6px 7px;
+  gap: 6px;
+  color: var(--text);
+}
+.panel-tools .connect-banner:hover { background: var(--soft); }
+.panel-tools .connect-banner > svg { color: var(--muted); }
+.panel-tools .connect-banner span { margin: 0; font-size: 10px; color: inherit; }
+.panel-save-status { margin-left: auto; margin-right: 5px; color: var(--muted); display: flex; align-items: center; gap: 5px; font-size: 9px; }
+.panel-save-status i { width: 4px; height: 4px; border-radius: 50%; background: #8b9c7b; }
+.overlay, .modal-backdrop { inset: 0; }
+.overlay-top { height: 57px; padding: 0 17px; font-size: 12px; }
+.editor-scroll, .connection-content, .preferences-content, .activity-content { padding-left: 20px; padding-right: 20px; }
+.editor-title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 23px; font-weight: 550; }
+.editor-body { font-size: 13px; }
+.editor-footer { padding-left: 20px; padding-right: 20px; }
+@media (max-height: 700px) { .main-header { height: 56px; padding-top: 0; } .folders { padding-bottom: 10px; } }
+
+.note-card[draggable="true"], .note-drag-handle, .folders > .folder-tab { cursor: grab; }
+.note-card[draggable="true"]:active, .note-drag-handle:active, .folders > .folder-tab:active { cursor: grabbing; }
+.note-drag-handle { user-select: none; }
+.drag-grip { opacity: .35; }
+.note-card:hover .drag-grip, .note-card:focus-visible .drag-grip { opacity: .8; }
+.is-dragging { opacity: .4; }
+.note-card.drop-before::before, .note-card.drop-after::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 2px;
+  background: var(--green); border-radius: 2px; pointer-events: none;
+}
+.note-card.drop-before::before { top: -7px; }
+.note-card.drop-after::after { bottom: -7px; }
+.folders > .folder-tab { position: relative; }
+.folder-tab.drop-before::before, .folder-tab.drop-after::after {
+  content: ""; position: absolute; top: 3px; bottom: 3px; width: 2px;
+  background: var(--green); border-radius: 2px; pointer-events: none;
+}
+.folder-tab.drop-before::before { left: 0; }
+.folder-tab.drop-after::after { right: 0; }
+.folders > .folder-tab.drop-folder {
+  background: var(--soft);
+  box-shadow: inset 0 0 0 2px var(--green);
+}
+
+.notes-scroll > .note-card:first-of-type.drop-before::before { top: 0; }
+
+.demo-badge { font-size: 9px; font-weight: 500; letter-spacing: 0; padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); margin-left: 8px; }
+.demo-banner { flex-shrink: 0; padding: 7px 18px; border-bottom: 1px solid var(--line); background: var(--soft); display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 10px; }
+.demo-banner button { display: flex; align-items: center; gap: 5px; color: var(--text); }
+.notebook-pref > span { display: flex; flex-direction: column; gap: 4px; }
+.notebook-pref strong { font-size: 11px; font-weight: 550; }
+.notebook-pref small { font-size: 10px; color: var(--muted); }
+
+.reset-confirmation-backdrop { position: absolute; inset: 0; z-index: 20; background: #0003; backdrop-filter: blur(2px); }
+.app-shell:has(.reset-confirmation-backdrop) > .toast { display: none; }
