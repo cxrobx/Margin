@@ -19,3 +19,18 @@ export function moveItem(ids, id, targetId, placement) {
   next.splice(next.indexOf(targetId) + (placement === 'after' ? 1 : 0), 0, id);
   return next;
 }
+
+// Place section dividers among already-ordered notes by their noteOrder
+// positions. Items without a position stay where they are.
+export function withDividers(items, dividers, order = []) {
+  const positions = new Map(order.map((id, index) => [id, index]));
+  const placed = dividers.filter(divider => positions.has(divider.id)).sort((a, b) => positions.get(a.id) - positions.get(b.id));
+  const out = []; let next = 0;
+  for (const item of items) {
+    const position = item.id === undefined ? -1 : positions.get(item.id) ?? Infinity;
+    while (next < placed.length && positions.get(placed[next].id) < position) out.push({ ...placed[next++], divider: true });
+    out.push(item);
+  }
+  while (next < placed.length) out.push({ ...placed[next++], divider: true });
+  return out;
+}

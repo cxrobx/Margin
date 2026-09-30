@@ -33,6 +33,8 @@ export const settingsSchema = z.object({
   glassTransparency: z.number().min(0).max(1).default(.38),
   vaultAddress: z.string().max(500).refine(value => { try { vaultEndpoint(value); return true; } catch { return false; } }, 'Use a local Onyx address, such as http://127.0.0.1:8899.').default('http://127.0.0.1:8899')
 }).strict();
+export const dividerLabel = z.string().trim().max(80);
+export const dividerSchema = z.object({ id: z.string().uuid(), view: z.string().min(1), label: dividerLabel }).strict();
 export const attachmentSchema = z.object({
   id: z.string().uuid(), name: z.string(), filename: z.string(),
   mime: z.string(), size: z.number().nonnegative()
@@ -44,7 +46,9 @@ export const noteSchema = createNoteSchema.extend({
 });
 const notebookSchema = z.object({
   notebookId: z.string().min(1).max(80).default('main'),
-  folders: z.array(z.object({ id: z.string(), name: title, color: colorSchema, ...appearanceSchema.shape })),
+  folders: z.array(z.object({ id: z.string(), name: title, color: colorSchema, parentId: z.string().nullable().default(null), ...appearanceSchema.shape })),
+  // Section dividers: aesthetic lines placed among the notes of one view (a folder or All).
+  dividers: z.array(dividerSchema).default([]),
   sectionAppearances: z.object({ all: appearanceSchema.optional(), pinned: appearanceSchema.optional(), trash: appearanceSchema.optional() }).strict().default({}),
   notes: z.array(noteSchema),
   noteOrder: z.array(z.string().uuid()).default([]),

@@ -2,6 +2,8 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { stateSchema, noteSchema, createNoteSchema } from './schema.mjs';
+import { descendantIds, folderTree, validateFolderTree } from './folders.mjs';
+import { orderNotes, withDividers } from './order.mjs';
 
 const LIMIT = 25 * 1024 * 1024;
 const uuid = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
@@ -89,6 +91,8 @@ export async function prepareBackup(store, file) {
   if (notebook.demo) throw new Error('This is a demo-mode snapshot. Export the active notebook before importing it.');
   if (notebook.notes.length > 5000 || notebook.folders.length > 500) throw new Error('This backup contains too many notes or folders.');
   if (!notebook.folders.some(folder => folder.id === 'inbox') || new Set(notebook.folders.map(folder => folder.id)).size !== notebook.folders.length || new Set(notebook.notes.map(note => note.id)).size !== notebook.notes.length) throw new Error('Invalid notebook identities.');
+  validateFolderTree(notebook.folders);
+  if (new Set(notebook.dividers.map(divider => divider.id)).size !== notebook.dividers.length || notebook.dividers.some(divider => divider.view !== 'all' && !notebook.folders.some(folder => folder.id === divider.view))) throw new Error('A section refers to a missing folder.');
   const embedded = new Map();
   for (let index = 0; index < notebook.notes.length; index++) {
     const note = notebook.notes[index];
@@ -127,19 +131,28 @@ export async function applyBackup(store, plan, mode, expectedRevision) {
         Object.assign(attachment, attachmentMap.get(attachment.id));
       }
       if (mode === 'replace') {
-        for (const key of ['notes', 'folders', 'noteOrder', 'tabOrder', 'sectionAppearances', 'activity']) state[key] = incoming[key];
+        for (const key of ['notes', 'folders', 'dividers', 'noteOrder', 'tabOrder', 'sectionAppearances', 'activity']) state[key] = incoming[key];
         state.notebookId = randomUUID();
       } else {
+        // Parents come first, so each folder merges into its mapped parent by name.
         const folders = new Map();
-        for (const folder of incoming.folders) {
-          let target = state.folders.find(value => value.name.toLowerCase() === folder.name.toLowerCase());
-          if (!target) { target = { ...folder, id: randomUUID() }; state.folders.push(target); }
+        for (const { folder } of folderTree(incoming.folders)) {
+          const parentId = folder.parentId ? folders.get(folder.parentId) : null;
+          let target = state.folders.find(value => (value.parentId ?? null) === parentId && value.name.toLowerCase() === folder.name.toLowerCase());
+          if (!target) { target = { ...folder, id: randomUUID(), parentId }; state.folders.push(target); }
           folders.set(folder.id, target.id);
         }
+        const ids = new Map();
         for (const note of incoming.notes) {
-          note.id = randomUUID(); note.folderId = folders.get(note.folderId); note.revision = 1;
-          state.notes.push(note); state.noteOrder.push(note.id);
+          ids.set(note.id, note.id = randomUUID()); note.folderId = folders.get(note.folderId); note.revision = 1;
+          state.notes.push(note);
         }
+        for (const divider of incoming.dividers) {
+          ids.set(divider.id, divider.id = randomUUID()); divider.view = divider.view === 'all' ? 'all' : folders.get(divider.view);
+          state.dividers.push(divider);
+        }
+        const incomingOrder = plan.notebook.noteOrder;
+        for (const item of withDividers(orderNotes(plan.notebook.notes, incomingOrder), plan.notebook.dividers, incomingOrder)) state.noteOrder.push(ids.get(item.id));
       }
       store.event(state, mode === 'replace' ? 'restored notebook from' : 'imported', { title: plan.name });
       return { count: incoming.notes.length, mode };
@@ -194,8 +207,8 @@ export async function importMarkdown(store, files, folderId = 'inbox', directori
       let target = folderId;
       if (input.folderName) {
         const name = input.folderName.trim().slice(0, 200);
-        let folder = state.folders.find(value => value.name.toLowerCase() === name.toLowerCase());
-        if (!folder) { folder = { id: randomUUID(), name, color: 'paper', icon: null, iconColor: null }; state.folders.push(folder); }
+        let folder = state.folders.find(value => !value.parentId && value.name.toLowerCase() === name.toLowerCase());
+        if (!folder) { folder = { id: randomUUID(), name, color: 'paper', parentId: null, icon: null, iconColor: null }; state.folders.push(folder); }
         target = folder.id;
       }
       const note = { ...createNoteSchema.parse({ title: input.title, body: input.body, folderId: target, source: 'Markdown import' }), id: randomUUID(), collapsed: false, revision: 1, attachments: [], deletedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
@@ -213,7 +226,8 @@ export async function importMarkdown(store, files, folderId = 'inbox', directori
 }
 export async function exportMarkdown(store, destination, { noteId, folderId } = {}) {
   const state = await store.read();
-  const notes = noteId ? [store.find(state, noteId)] : state.notes.filter(note => !note.deletedAt && (!folderId || note.folderId === folderId));
+  const folders = folderId ? descendantIds(state.folders, folderId) : null;
+  const notes = noteId ? [store.find(state, noteId)] : state.notes.filter(note => !note.deletedAt && (!folders || folders.has(note.folderId)));
   const output = noteId ? path.dirname(destination) : destination;
   await fs.mkdir(output, { recursive: true });
   const directoryNames = new Map(); const folderNames = {};

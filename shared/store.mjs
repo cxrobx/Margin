@@ -3,9 +3,10 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import lockfile from 'proper-lockfile';
-import { createNoteSchema, updateNoteSchema, stateSchema, settingsSchema, colorSchema, appearanceSchema } from './schema.mjs';
+import { createNoteSchema, updateNoteSchema, stateSchema, settingsSchema, colorSchema, appearanceSchema, dividerLabel } from './schema.mjs';
 import { vaultPaletteSchema, savedThemeSchema } from './themes.mjs';
-import { moveItem, orderNotes, orderTabs } from './order.mjs';
+import { moveItem, orderNotes, orderTabs, withDividers } from './order.mjs';
+import { canPlace, childrenOf, descendantIds, siblingsOf, uniqueName, validateFolderTree } from './folders.mjs';
 import { recordNoteHistory } from './notebook-features.mjs';
 
 export function defaultDataDir() {
@@ -21,12 +22,12 @@ const imageTypes = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/
 
 function freshNotebook() {
   return { notebookId: randomUUID(), folders: [
-    { id: 'inbox', name: 'Inbox', color: 'paper' },
-    { id: 'work', name: 'Work', color: 'sage' },
-    { id: 'personal', name: 'Personal', color: 'rose' }
-  ], sectionAppearances: {}, notes: [], noteOrder: [], tabOrder: [], activity: [] };
+    { id: 'inbox', name: 'Inbox', color: 'paper', parentId: null },
+    { id: 'work', name: 'Work', color: 'sage', parentId: null },
+    { id: 'personal', name: 'Personal', color: 'rose', parentId: null }
+  ], dividers: [], sectionAppearances: {}, notes: [], noteOrder: [], tabOrder: [], activity: [] };
 }
-const notebookFields = ['notebookId', 'folders', 'notes', 'noteOrder', 'tabOrder', 'activity', 'sectionAppearances'];
+const notebookFields = ['notebookId', 'folders', 'dividers', 'notes', 'noteOrder', 'tabOrder', 'activity', 'sectionAppearances'];
 const notebookContent = state => Object.fromEntries(notebookFields.map(key => [key, structuredClone(state[key])]));
 function freshState() {
   return { ...freshNotebook(), version: 1, revision: 0, demo: null,
@@ -69,6 +70,7 @@ export class NoteStore {
   }
   async write(state, backup = true) {
     const validated = stateSchema.parse(state);
+    validateFolderTree(validated.folders);
     if (backup) {
       const backupName = `${Date.now()}-${state.revision}-${randomUUID().slice(0, 6)}.json`;
       await fs.copyFile(this.file, path.join(this.dir, 'backups', backupName));
@@ -103,6 +105,8 @@ export class NoteStore {
     return note;
   }
   folder(state, id) { if (!state.folders.some(f => f.id === id)) throw new Error('Folder not found. Use list_folders to get a current folder ID.'); }
+  // Notes and section dividers share noteOrder so a divider keeps its place among the notes.
+  itemOrder(state) { return withDividers(orderNotes(state.notes, state.noteOrder), state.dividers, state.noteOrder).map(item => item.id); }
   checkRevision(note, expected) { if (expected !== undefined && note.revision !== expected) throw new ConflictError(); }
   touch(note) { note.updatedAt = now(); note.revision++; }
   async setDemoMode(enabled) {
@@ -129,10 +133,11 @@ export class NoteStore {
       return { removedNotes, notebookId: state.notebookId };
     });
   }
-  async list({ query = '', folderId, pinned, deleted = false, limit = 100, offset = 0 } = {}) {
+  async list({ query = '', folderId, includeSubfolders = true, pinned, deleted = false, limit = 100, offset = 0 } = {}) {
     const state = await this.read();
     const q = query.trim().toLowerCase();
-    const notes = state.notes.filter(n => Boolean(n.deletedAt) === deleted && (!folderId || n.folderId === folderId) && (pinned === undefined || n.pinned === pinned) && (!q || `${n.title}\n${n.body}\n${n.attachments.map(a => a.name).join(' ')}`.toLowerCase().includes(q)));
+    const folders = folderId ? includeSubfolders ? descendantIds(state.folders, folderId) : new Set([folderId]) : null;
+    const notes = state.notes.filter(n => Boolean(n.deletedAt) === deleted && (!folders || folders.has(n.folderId)) && (pinned === undefined || n.pinned === pinned) && (!q || `${n.title}\n${n.body}\n${n.attachments.map(a => a.name).join(' ')}`.toLowerCase().includes(q)));
     return { notes: orderNotes(notes, state.noteOrder).slice(offset, offset + limit), total: notes.length, demoMode: Boolean(state.demo) };
   }
   async get(id) { return this.find(await this.read(), id); }
@@ -187,26 +192,57 @@ export class NoteStore {
   }
   async reorderNote(id, targetId, placement) {
     return this.mutate(state => {
-      this.find(state, id); this.find(state, targetId);
-      state.noteOrder = moveItem(orderNotes(state.notes, state.noteOrder).map(note => note.id), id, targetId, placement);
+      for (const value of [id, targetId]) if (!state.dividers.some(divider => divider.id === value)) this.find(state, value);
+      state.noteOrder = moveItem(this.itemOrder(state), id, targetId, placement);
       return state.noteOrder;
+    });
+  }
+  async createDivider({ view, label = '', targetId = null, placement = 'before' } = {}) {
+    const clean = dividerLabel.parse(label);
+    return this.mutate(state => {
+      if (view !== 'all') this.folder(state, view);
+      const divider = { id: randomUUID(), view, label: clean };
+      const ids = this.itemOrder(state);
+      if (targetId !== null && !ids.includes(targetId)) throw new Error('The note was removed. Try again.');
+      state.dividers.push(divider);
+      state.noteOrder = targetId === null ? [...ids, divider.id] : moveItem([...ids, divider.id], divider.id, targetId, placement);
+      return divider;
+    });
+  }
+  async renameDivider(id, label) {
+    const clean = dividerLabel.parse(label);
+    return this.mutate(state => {
+      const divider = state.dividers.find(value => value.id === id);
+      if (!divider) throw new Error('This section was removed.');
+      divider.label = clean; return divider;
+    });
+  }
+  async deleteDivider(id) {
+    return this.mutate(state => {
+      if (!state.dividers.some(value => value.id === id)) throw new Error('This section was removed.');
+      state.dividers = state.dividers.filter(value => value.id !== id);
+      state.noteOrder = state.noteOrder.filter(value => value !== id);
+      return { id };
     });
   }
   async reorderTab(id, targetId, placement) {
     return this.mutate(state => {
+      const source = state.folders.find(f => f.id === id), target = state.folders.find(f => f.id === targetId);
+      if ((source?.parentId ?? null) !== (target?.parentId ?? null)) throw new Error('Tabs can be reordered within their own row. To move a folder into another, rename it and choose where it sits.');
       state.tabOrder = moveItem(orderTabs(state.folders, state.tabOrder).map(tab => tab.id), id, targetId, placement);
       const positions = new Map(state.tabOrder.map((value, index) => [value, index]));
       state.folders.sort((a, b) => positions.get(a.id) - positions.get(b.id));
       return state.tabOrder;
     });
   }
-  async createFolder(name, color = 'paper') {
+  async createFolder(name, color = 'paper', parentId = null) {
     const cleanName = name.trim();
     if (!cleanName || cleanName.length > 200) throw new Error('Folder names must be between 1 and 200 characters.');
     colorSchema.parse(color);
     return this.mutate(state => {
-      if (state.folders.some(f => f.name.toLowerCase() === cleanName.toLowerCase())) throw new Error('A folder with that name already exists.');
-      const folder = { id: randomUUID(), name: cleanName, color }; state.folders.push(folder); return folder;
+      if (parentId !== null) { this.folder(state, parentId); if (!canPlace(state.folders, null, parentId)) throw new Error('Folders nest up to three levels deep.'); }
+      if (childrenOf(state.folders, parentId).some(f => f.name.toLowerCase() === cleanName.toLowerCase())) throw new Error('A folder with that name already exists here.');
+      const folder = { id: randomUUID(), name: cleanName, color, parentId }; state.folders.push(folder); return folder;
     });
   }
   async setSectionAppearance(id, input) {
@@ -219,23 +255,43 @@ export class NoteStore {
     });
   }
   async renameFolder(id, name) {
+    const folder = (await this.read()).folders.find(f => f.id === id);
+    return this.updateFolder(id, { name, parentId: folder?.parentId ?? null });
+  }
+  // Rename a folder and choose where it sits: the top level or inside another folder.
+  async updateFolder(id, { name, parentId = null }) {
     return this.mutate(state => {
       const folder = state.folders.find(f => f.id === id);
-      if (!folder || id === 'inbox') throw new Error('The Inbox cannot be renamed.');
-      const cleanName = name.trim();
+      if (!folder || id === 'inbox') throw new Error('The Inbox cannot be renamed or moved.');
+      const cleanName = typeof name === 'string' ? name.trim() : '';
       if (!cleanName || cleanName.length > 200) throw new Error('Enter a valid folder name.');
-      if (state.folders.some(f => f.id !== id && f.name.toLowerCase() === cleanName.toLowerCase())) throw new Error('A folder with that name already exists.');
-      folder.name = cleanName; return folder;
+      if (parentId !== (folder.parentId ?? null)) {
+        if (parentId !== null) this.folder(state, parentId);
+        if (!canPlace(state.folders, id, parentId)) throw new Error('A folder cannot go inside itself, and folders nest up to three levels deep.');
+      }
+      if (childrenOf(state.folders, parentId).some(f => f.id !== id && f.name.toLowerCase() === cleanName.toLowerCase())) throw new Error('A folder with that name already exists here.');
+      folder.name = cleanName; folder.parentId = parentId; return folder;
     });
   }
+  // A subfolder's notes, dividers and children move up into its parent. A
+  // top-level folder's notes move to the Inbox and its children become top-level.
   async deleteFolder(id) {
     return this.mutate(state => {
       if (id === 'inbox') throw new Error('The Inbox cannot be deleted.');
       this.folder(state, id);
-      for (const note of state.notes) if (note.folderId === id) { note.folderId = 'inbox'; this.touch(note); }
+      const folder = state.folders.find(f => f.id === id);
+      const parentId = folder.parentId ?? null, destination = parentId ?? 'inbox';
+      for (const note of state.notes) if (note.folderId === id) { note.folderId = destination; this.touch(note); }
+      const removed = new Set(parentId ? [] : state.dividers.filter(divider => divider.view === id).map(divider => divider.id));
+      state.dividers = state.dividers.filter(divider => !removed.has(divider.id)).map(divider => divider.view === id ? { ...divider, view: parentId } : divider);
+      state.noteOrder = state.noteOrder.filter(value => !removed.has(value));
+      for (const child of childrenOf(state.folders, id)) {
+        child.name = uniqueName(siblingsOf(state.folders, folder), child.name, `from ${folder.name}`);
+        child.parentId = parentId;
+      }
       state.folders = state.folders.filter(f => f.id !== id);
       state.tabOrder = state.tabOrder.filter(value => value !== id);
-      return { movedTo: 'inbox' };
+      return { movedTo: destination };
     });
   }
   async setSettings(input) { return this.mutate(state => {

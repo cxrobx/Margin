@@ -24,10 +24,11 @@ function tool(name, description, inputSchema, fn, hints = annotations()) {
     } catch (e) { return { content: [{ type: 'text', text: e.message }], isError: true }; }
   });
 }
-tool('list_folders', 'List folders and their IDs. New notes default to Inbox.', {}, async () => { const state = await store.read(); return { folders: state.folders, demoMode: Boolean(state.demo) }; }, annotations(true));
-tool('create_folder', 'Create a folder for a project or topic.', { name: z.string().trim().min(1).max(200), color: createNoteSchema.shape.color }, ({ name, color }) => store.createFolder(name, color));
+tool('list_folders', 'List folders and their IDs. A folder with a parentId sits inside that folder (up to three levels). New notes default to Inbox.', {}, async () => { const state = await store.read(); return { folders: state.folders, demoMode: Boolean(state.demo) }; }, annotations(true));
+tool('create_folder', 'Create a folder for a project or topic. Pass parentId to create it inside another folder (up to three levels deep).', { name: z.string().trim().min(1).max(200), color: createNoteSchema.shape.color, parentId: z.string().optional() }, ({ name, color, parentId }) => store.createFolder(name, color, parentId ?? null));
 tool('list_notes', 'Search titles, note content, and attachment names. Returns summaries, IDs and revisions; use read_note for full content.', {
   query: z.string().default(''), folderId: z.string().optional(), pinned: z.boolean().optional(),
+  includeSubfolders: z.boolean().default(true).describe('With folderId, also list notes in the folders inside it'),
   deleted: z.boolean().default(false).describe('True to list Trash'),
   limit: z.number().int().min(1).max(100).default(50), offset: z.number().int().nonnegative().default(0)
 }, async args => {

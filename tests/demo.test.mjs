@@ -10,7 +10,7 @@ async function fixture(t) {
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
   return { dir, store: await new NoteStore(dir).init() };
 }
-const content = state => Object.fromEntries(['notebookId', 'notes', 'folders', 'noteOrder', 'tabOrder', 'activity', 'sectionAppearances'].map(key => [key, state[key]]));
+const content = state => Object.fromEntries(['notebookId', 'notes', 'folders', 'dividers', 'noteOrder', 'tabOrder', 'activity', 'sectionAppearances'].map(key => [key, state[key]]));
 
 test('new notebooks are empty and older notebooks keep their content without a rewrite', async t => {
   const { store } = await fixture(t);
