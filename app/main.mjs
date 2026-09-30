@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, screen, nativeImage, nativeTheme, clipboard, dialog, shell, protocol } from 'electron';
+import { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, screen, nativeImage, nativeTheme, clipboard, dialog, shell, protocol, autoUpdater as nativeUpdater } from 'electron';
 import { fileURLToPath } from 'node:url';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -12,6 +12,7 @@ import { fetchVaultTheme } from './vault-theme.mjs';
 import { PanelMotion } from './panel-motion.mjs';
 import { WindowMaterial } from './window-material.mjs';
 import { AppFocus } from './app-focus.mjs';
+import { createUpdater, createLog } from './updater.mjs';
 import { MONOKAI_SODA_THEME } from '../shared/themes.mjs';
 import { parseAppLink } from '../shared/app-links.mjs';
 import { createLinkOpener, installedLinkApps } from './document-links.mjs';
@@ -28,7 +29,7 @@ let win, tray, store, settings, timer, edgeTimer, vaultTimer, vaultPalette, quit
 let vaultStatus = { connected: false, checkedAt: null };
 const vaultRequests = new Map();
 const edgeBars = new Map();
-let panelDisplayId, panelMotion, windowMaterial, appFocus, panelReady = false;
+let panelDisplayId, panelMotion, windowMaterial, appFocus, updater, panelReady = false;
 let edgeEnteredAt = null, lastHideAt = 0, quitRequested = false;
 const backupPlans = new Map();
 const linkLaunches = [];
@@ -178,6 +179,15 @@ if (store && settings) {
   });
   windowMaterial = new WindowMaterial(win, nativeTheme);
   appFocus = new AppFocus();
+  updater = createUpdater({
+    app, dialog, focus: appFocus,
+    log: createLog({ file: path.join(app.getPath('logs'), 'updater.log') }),
+    loadAutoUpdater: async () => (await import('electron-updater')).default.autoUpdater,
+    beforeInstall: flushEditor
+  });
+  // quitAndInstall closes every window before it quits, and the panel normally
+  // refuses to close. This fires only once the update is verified and on its way.
+  if (updater.enabled) nativeUpdater.on('before-quit-for-update', prepareToQuit);
   panelMotion = new PanelMotion(win, { material: windowMaterial, focus: appFocus, reducedMotion: () => nativeTheme.prefersReducedMotion, hidden: syncEdgeBars });
   if (process.platform === 'darwin') win.setWindowButtonVisibility(false);
   if (process.env.MARGIN_SMOKE_TEST) win.webContents.on('console-message', event => console.log('Renderer:', event.message));
@@ -237,12 +247,13 @@ if (store && settings) {
       const text = await clipboard.readText();
       if (text.trim()) { await store.create({ title: text.split('\n')[0].slice(0, 80), body: text, source: 'Clipboard' }); await publish(); show(); }
     } },
+    { type: 'separator' }, { label: 'Check for Updates…', enabled: updater.enabled, click: () => void updater.checkNow() },
     { type: 'separator' }, { label: 'Quit Margin', click: () => app.quit() }
   ]);
   tray.on('click', toggle);
   tray.on('right-click', () => tray.popUpContextMenu(trayMenu));
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: 'Margin Notes', submenu: [{ role: 'about' }, { type: 'separator' }, { label: 'Show / hide', accelerator: 'CmdOrCtrl+Shift+Space', click: toggle }, { type: 'separator' }, { role: 'quit' }] },
+    { label: 'Margin Notes', submenu: [{ role: 'about' }, { label: 'Check for Updates…', enabled: updater.enabled, click: () => void updater.checkNow() }, { type: 'separator' }, { label: 'Show / hide', accelerator: 'CmdOrCtrl+Shift+Space', click: toggle }, { type: 'separator' }, { role: 'quit' }] },
     { label: 'File', submenu: [{ id: 'new-note', label: 'New Note', accelerator: 'CmdOrCtrl+N', click: newNote }] },
     { label: 'Edit', submenu: [{ id: 'undo', label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => win.webContents.send('app:edit-command', 'undo') }, { id: 'redo', label: 'Redo', accelerator: 'Shift+CmdOrCtrl+Z', click: () => win.webContents.send('app:edit-command', 'redo') }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
     { label: 'View', submenu: [{ role: 'reload' }, { role: 'toggleDevTools' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }] }
@@ -394,6 +405,7 @@ if (store && settings) {
   if (process.env.MARGIN_SMOKE_TEST) console.log('Smoke: loading renderer');
   if (devUrl) await win.loadURL(devUrl); else await win.loadFile(path.join(root, 'dist/index.html'));
   if (settings.themeId === 'vault') refreshVaultTheme().catch(console.error);
+  updater.start();
   if (process.env.MARGIN_SMOKE_TEST) console.log('Smoke: renderer loaded');
   if (process.env.MARGIN_SMOKE_TEST) {
     const { runSmoke } = await import(process.env.MARGIN_LINK_SMOKE_TEST ? '../scripts/links-smoke.mjs' : process.env.MARGIN_FEATURE_SMOKE_TEST ? '../scripts/features-smoke.mjs' : process.env.MARGIN_FOLDERS_SMOKE_TEST ? '../scripts/folders-smoke.mjs' : '../scripts/smoke.mjs');
@@ -413,6 +425,9 @@ if (store && settings) {
   if (process.env.MARGIN_SMOKE_TEST) app.exit(1);
   else { dialog.showErrorBox('Margin could not start', e.message); app.quit(); }
 });
+function prepareToQuit() {
+  quitting = true; panelMotion?.dispose(); clearInterval(timer); clearInterval(edgeTimer); clearInterval(vaultTimer); globalShortcut.unregisterAll(); for (const bar of edgeBars.values()) bar.destroy();
+}
 app.on('before-quit', event => {
   if (!quitting && win && !win.isDestroyed() && panelReady) {
     event.preventDefault();
@@ -422,5 +437,6 @@ app.on('before-quit', event => {
     }
     return;
   }
-  quitting = true; panelMotion?.dispose(); clearInterval(timer); clearInterval(edgeTimer); clearInterval(vaultTimer); globalShortcut.unregisterAll(); for (const bar of edgeBars.values()) bar.destroy(); });
+  prepareToQuit();
+});
 app.on('window-all-closed', () => {});
