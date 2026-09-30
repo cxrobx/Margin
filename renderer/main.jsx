@@ -21,7 +21,9 @@ import './vault.css';
 import './icons.css';
 import { GLASS_THEME, folderHue, resolveAppearance } from '../shared/themes.mjs';
 import { installPanelMotion } from './panel-motion.mjs';
-import { orderNotes, orderTabs } from '../shared/order.mjs';
+import { orderNotes, orderTabs, withDividers } from '../shared/order.mjs';
+import { MAX_FOLDER_DEPTH, canPlace, childrenOf, descendantIds, folderDepth, folderLabel, folderPath, folderTree, rememberSelection, resolveSelection } from '../shared/folders.mjs';
+import SectionDivider, { ContextMenu } from './SectionDivider.jsx';
 import { useReorder } from './reorder.jsx';
 import { NoteHistory, BackupTools } from './NotebookTools.jsx';
 import { rehypeSearch, searchParts, matchesNote } from './search.mjs';
@@ -255,7 +257,7 @@ const Editor = React.forwardRef(function Editor({ initial, focus, folders, close
           <IconButton label="Note settings" onClick={() => setOptions(!options)}><Settings size={14} /></IconButton>
           {options && <div className="popup-menu inline-note-options" aria-label="Note settings options">
             <div className="inline-kind-options">{Object.entries(kindIcons).map(([kind, Icon]) => <button key={kind} aria-label={`${kindNames[kind]} type`} aria-pressed={draft.kind === kind} className={draft.kind === kind ? 'selected' : ''} onClick={() => { change({ kind }); if (kind === 'checklist' && !draft.body) rich.current?.checklist(); if (kind === 'code' && !draft.body) rich.current?.codeBlock(); }}><Icon size={14} />{kindNames[kind]}</button>)}</div>
-            <label className="inline-folder-option"><Folder size={13} /><select aria-label="Note folder" value={draft.folderId} onChange={e => change({ folderId: e.target.value })}>{folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
+            <label className="inline-folder-option"><Folder size={13} /><select aria-label="Note folder" value={draft.folderId} onChange={e => change({ folderId: e.target.value })}>{folderTree(folders).map(({ folder: f }) => <option key={f.id} value={f.id}>{folderLabel(folders, f.id)}</option>)}</select></label>
             <button aria-label={draft.pinned ? 'Unpin note' : 'Pin note'} onClick={() => change({ pinned: !draft.pinned })}><Pin size={14} />{draft.pinned ? 'Unpin note' : 'Pin note'}</button>
             <button aria-label="Attach a file or image" disabled={!autosave.canSave || saving || conflict} onClick={() => autosave.attach()}><Paperclip size={14} />Attach a file or image</button>
             <div className="inline-color-options">{colors.map(color => <button key={color} className={`swatch color-${color} ${draft.color === color ? 'selected' : ''}`} aria-label={`${color} note color`} onClick={() => change({ color })}>{draft.color === color && <Check size={13} />}</button>)}</div>
@@ -327,17 +329,23 @@ function Preferences({ state, hasCXTasks, close, act, showActivity, showThemes, 
   </section>;
 }
 
-function FolderDialog({ initial, close, act, select }) {
+function FolderDialog({ initial, parentId: initialParent = null, folders, close, act, select }) {
   const [name, setName] = useState(initial?.name || '');
   const [color, setColor] = useState('sage');
+  const [parentId, setParentId] = useState(initial ? initial.parentId ?? null : initialParent);
   const [error, setError] = useState('');
+  // Never inside itself or a descendant, and never deeper than three levels.
+  const places = folderTree(folders).filter(({ folder }) => canPlace(folders, initial?.id ?? null, folder.id));
   const submit = async e => {
     e.preventDefault();
-    const result = await (initial ? api.renameFolder(initial.id, name) : api.createFolder(name, color));
+    const result = await (initial ? api.updateFolder(initial.id, name, parentId) : api.createFolder(name, color, parentId));
     if (!result.ok) { setError(result.error); return; }
     select(result.value.id); close();
   };
-  return <div className="modal-backdrop"><form className="folder-dialog" onSubmit={submit} role="dialog" aria-modal="true" aria-label={initial ? 'Rename folder' : 'New folder'}><IconButton label="Close" onClick={close} type="button"><X size={17} /></IconButton><FolderPlus size={25} /><h2>{initial ? 'A fresh name' : 'A place for something'}</h2><p>{initial ? 'Rename this folder.' : 'Give a project or a collection its own corner.'}</p><input autoFocus aria-label="Folder name" placeholder="Folder name" value={name} maxLength={200} onChange={e => setName(e.target.value)} required />{!initial && <div className="folder-colors">{colors.map(c => <button type="button" key={c} aria-label={`${c} folder color`} className={`swatch color-${c} ${c === color ? 'selected' : ''}`} onClick={() => setColor(c)}>{c === color && <Check size={13} />}</button>)}</div>}{error && <p className="error">{error}</p>}<button className="primary" type="submit">{initial ? 'Save name' : 'Create folder'}<ArrowRight size={15} /></button></form></div>;
+  const parent = folders.find(f => f.id === parentId);
+  return <div className="modal-backdrop"><form className="folder-dialog" onSubmit={submit} role="dialog" aria-modal="true" aria-label={initial ? 'Rename folder' : 'New folder'}><IconButton label="Close" onClick={close} type="button"><X size={17} /></IconButton><FolderPlus size={25} /><h2>{initial ? 'A fresh name' : 'A place for something'}</h2><p>{initial ? 'Rename this folder or move it.' : parent ? `A new corner inside ${parent.name}.` : 'Give a project or a collection its own corner.'}</p><input autoFocus aria-label="Folder name" placeholder="Folder name" value={name} maxLength={200} onChange={e => setName(e.target.value)} required />
+    <label className="folder-parent"><span>Inside</span><select aria-label="Folder location" value={parentId ?? ''} onChange={e => setParentId(e.target.value || null)}><option value="">Top level</option>{places.map(({ folder }) => <option key={folder.id} value={folder.id}>{folderLabel(folders, folder.id)}</option>)}</select></label>
+    {!initial && <div className="folder-colors">{colors.map(c => <button type="button" key={c} aria-label={`${c} folder color`} className={`swatch color-${c} ${c === color ? 'selected' : ''}`} onClick={() => setColor(c)}>{c === color && <Check size={13} />}</button>)}</div>}{error && <p className="error">{error}</p>}<button className="primary" type="submit">{initial ? 'Save folder' : 'Create folder'}<ArrowRight size={15} /></button></form></div>;
 }
 
 function App() {
@@ -364,6 +372,9 @@ function App() {
   const [folderDialog, setFolderDialog] = useState(null);
   const [iconTarget, setIconTarget] = useState(null);
   const [folderMenu, setFolderMenu] = useState(false);
+  const [folderMemory, setFolderMemory] = useState({});
+  const [editingDivider, setEditingDivider] = useState(null);
+  const [paneMenu, setPaneMenu] = useState(null);
   const [toast, setToast] = useState('');
   const [fatal, setFatal] = useState('');
   const [draftExists, setDraftExists] = useState(false);
@@ -377,6 +388,22 @@ function App() {
   }
   const changeDemo = enabled => act(api.demo(enabled), enabled ? 'Demo mode started' : 'Demo mode ended');
   const resetNotebook = expectedRevision => act(api.resetNotebook(expectedRevision), 'Notebook reset');
+  // Each parent folder remembers the sub-tab chosen last, per notebook and across restarts.
+  const memoryKey = state ? `margin-folder-memory:${state.notebookId}` : null;
+  useEffect(() => {
+    if (!memoryKey) return;
+    try { const saved = JSON.parse(localStorage.getItem(memoryKey) || '{}'); setFolderMemory(saved && typeof saved === 'object' ? saved : {}); }
+    catch { setFolderMemory({}); }
+  }, [memoryKey]);
+  useEffect(() => {
+    if (!state) return;
+    setFolderMemory(previous => {
+      const next = rememberSelection(previous, state.folders, filter);
+      if (next !== previous) try { localStorage.setItem(memoryKey, JSON.stringify(next)); } catch { /* Memory is a convenience. */ }
+      return next;
+    });
+  }, [filter, memoryKey]);
+  const selectFolder = id => { setFilter(resolveSelection(folderMemory, state.folders, id)); setFolderMenu(false); };
   useEffect(() => {
     if (!state) return;
     setFilter('all'); setQuery(''); setOverlay(null); setEditor(null); setEditorId(null); setFolderDialog(null); setFolderMenu(false); setIconTarget(null);
@@ -464,14 +491,39 @@ function App() {
     return tint ? { '--vault-folder-color': tint.color } : undefined;
   };
   const activeFolder = state.folders.find(f => f.id === filter);
-  const notes = orderNotes(state.notes, state.noteOrder).filter(n => n.id === editor?.initial.id || (Boolean(n.deletedAt) === (filter === 'trash') && ((query.trim() && searchScope === 'all') || ((!activeFolder || n.folderId === filter) && (filter !== 'pinned' || n.pinned))) && matchesNote(n, query)));
+  const inFolder = activeFolder ? descendantIds(state.folders, activeFolder.id) : null;
+  const notes = orderNotes(state.notes, state.noteOrder).filter(n => n.id === editor?.initial.id || (Boolean(n.deletedAt) === (filter === 'trash') && ((query.trim() && searchScope === 'all') || ((!inFolder || inFolder.has(n.folderId)) && (filter !== 'pinned' || n.pinned))) && matchesNote(n, query)));
   // Keep one stable editor at the original card position as autosave assigns an
   // ID or Save draft as new changes it. Typing never remounts the editor.
   const cards = notes.filter(n => n.id !== editorId || n.id === editor?.initial.id).map(n => n.id === editor?.initial.id ? { ...n, editing: true } : n);
   if (editor && !cards.some(n => n.editing)) cards.unshift({ id: editor.initial.id, editing: true });
 
-  const tabs = orderTabs(state.folders, state.tabOrder);
-  const noteIds = notes.map(note => note.id);
+  // Sections belong to the view they were added in, and step aside for search, Pinned and Trash.
+  const showDividers = !query.trim() && !['pinned', 'trash'].includes(filter);
+  const listItems = withDividers(cards, showDividers ? state.dividers.filter(divider => divider.view === filter) : [], state.noteOrder);
+  const noteIds = listItems.filter(item => item.id && !item.editing).map(item => item.id);
+  const selectedPath = folderPath(state.folders, filter);
+  const topId = selectedPath[0]?.id ?? filter;
+  const tabs = orderTabs(childrenOf(state.folders, null), state.tabOrder);
+  // One row of sub-tabs per selected level that has folders inside it.
+  const subRows = selectedPath.map((parent, index) => ({ parent, selected: selectedPath[index + 1]?.id ?? parent.id, children: orderTabs(childrenOf(state.folders, parent.id), state.tabOrder).filter(tab => tab.id !== 'all') })).filter(row => row.children.length);
+  const addSection = async ({ targetId, placement }) => {
+    setPaneMenu(null);
+    const divider = await act(api.createDivider(filter, '', targetId, placement));
+    if (divider) setEditingDivider(divider.id);
+  };
+  const paneContextMenu = event => {
+    if (!showDividers || event.target.closest('.note-card, .note-divider, .editor, input, textarea, [contenteditable=true]')) return;
+    event.preventDefault();
+    const rows = [...event.currentTarget.querySelectorAll(':scope > [data-note-id], :scope > [data-divider-id]')].filter(el => noteIds.includes(el.dataset.noteId || el.dataset.dividerId));
+    const below = rows.find(el => { const box = el.getBoundingClientRect(); return event.clientY < box.top + box.height / 2; });
+    const anchor = below || rows.at(-1);
+    setPaneMenu({ x: event.clientX, y: event.clientY, items: [{ label: 'Add section here', icon: Minus, run: () => addSection({ targetId: anchor ? anchor.dataset.noteId || anchor.dataset.dividerId : null, placement: below ? 'before' : 'after' }) }] });
+  };
+  const dividerMenu = (event, divider) => setPaneMenu({ x: event.clientX, y: event.clientY, items: [
+    { label: divider.label ? 'Rename section' : 'Name section', icon: FileText, run: () => { setPaneMenu(null); setEditingDivider(divider.id); } },
+    { label: 'Remove section', icon: Trash2, danger: true, run: () => { setPaneMenu(null); act(api.deleteDivider(divider.id), 'Section removed'); } }
+  ] });
   const heading = query ? 'Search results' : activeFolder?.name || ({ all: 'All notes', pinned: 'Pinned notes', trash: 'Trash' })[filter];
   const headingHue = query ? 'blue' : activeFolder ? (activeFolder.id === 'inbox' ? 'blue' : folderHue(activeFolder.color)) : ({ all: 'teal', pinned: 'amber', trash: 'red' })[filter];
   const sectionAppearance = activeFolder || state.sectionAppearances[filter] || {};
@@ -481,21 +533,29 @@ function App() {
     <header className="main-header"><div className="brand">Margin{state.demo && <span className="demo-badge">Demo</span>}</div><div className="panel-header-actions"><IconButton label="Focus search" onClick={() => searchRef.current?.focus()}><Search size={19} strokeWidth={1.7} /></IconButton><IconButton label="New note" onClick={addNote}><Plus size={22} strokeWidth={1.7} /></IconButton><IconButton label="Hide Margin" onClick={() => api.hide()}>{state.settings.edge === 'right' ? <ChevronRight size={18} /> : <ArrowLeft size={18} />}</IconButton></div></header>
     <div className="search-box"><Search size={16} strokeWidth={1.8} /><input ref={searchRef} aria-label="Search notes" placeholder="Find a thought…" value={query} onChange={e => { if (!query.trim() && e.target.value.trim()) setSearchScope('all'); setQuery(e.target.value); }} />{query ? <IconButton label="Clear search" onClick={() => setQuery('')}><X size={13} /></IconButton> : <kbd>⌘ F</kbd>}</div>
     {query.trim() && <div className="search-scope" role="group" aria-label="Search scope"><button aria-pressed={searchScope === 'all'} onClick={() => setSearchScope('all')}>{filter === 'trash' ? 'All Trash' : 'All notes'}</button><button aria-pressed={searchScope === 'section'} disabled={filter === 'all'} onClick={() => setSearchScope('section')}>{activeFolder ? `In ${activeFolder.name}` : 'This section'}</button></div>}
-    <nav className="folders" aria-label="Folders">{tabs.map(f => <button key={f.id} data-folder-id={f.id} style={folderTint(f)} className={`folder-tab hue-${f.id === 'all' ? 'teal' : f.id === 'inbox' ? 'blue' : folderHue(f.color)} ${filter === f.id ? 'selected' : ''} ${reorder.className('tab', f.id)}`} draggable title="Drag to reorder · Option ←/→" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
+    <nav className="folders" aria-label="Folders">{tabs.map(f => <button key={f.id} data-folder-id={f.id} style={folderTint(f)} className={`folder-tab hue-${f.id === 'all' ? 'teal' : f.id === 'inbox' ? 'blue' : folderHue(f.color)} ${topId === f.id ? 'selected' : ''} ${reorder.className('tab', f.id)}`} draggable title="Drag to reorder · Option ←/→" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
       onDragStart={e => reorder.start(e, 'tab', f.id)} onDragEnd={reorder.end} onDragOver={e => reorder.over(e, 'tab', f.id, 'x')} onDrop={e => reorder.drop(e, 'tab', f.id, 'x')} onDragLeave={e => reorder.leave(e, 'tab', f.id)} onKeyDown={e => reorder.keyboard(e, 'tab', f.id, tabs.map(tab => tab.id), 'x')}
       onContextMenu={e => { e.preventDefault(); chooseSectionIcon(f.id, f.id === 'all' ? 'All notes' : f.name, f.id === 'all' ? FileText : f.id === 'inbox' ? Inbox : Folder); }}
-      onClick={() => { setFilter(f.id); setFolderMenu(false); }}><NodeIcon icon={(f.id === 'all' ? state.sectionAppearances.all : f)?.icon} iconColor={(f.id === 'all' ? state.sectionAppearances.all : f)?.iconColor} fallback={f.id === 'all' ? FileText : f.id === 'inbox' ? Inbox : Folder} className="folder-glyph" size={14} />{f.name}</button>)}<IconButton label="New folder" onClick={() => setFolderDialog({})}><Plus size={15} /></IconButton></nav>
-    <div className={`section-heading hue-${headingHue}`} style={folderTint(activeFolder)}><div><NodeIcon icon={query ? null : sectionAppearance.icon} iconColor={query ? null : sectionAppearance.iconColor} fallback={HeadingIcon} className="heading-glyph" size={15} /><h2>{heading}</h2><span className="count">{cards.length}</span></div><div className="section-tools"><IconButton label={filter === 'pinned' ? 'Show all notes' : 'Show pinned notes'} className={`icon-button ${filter === 'pinned' ? 'active' : ''}`} onClick={() => setFilter(filter === 'pinned' ? 'all' : 'pinned')}><Pin size={14} /></IconButton><div className="menu-wrap"><IconButton label="Notebook options" onClick={() => setFolderMenu(!folderMenu)}><MoreHorizontal size={17} /></IconButton>{folderMenu && <div className="popup-menu notebook-menu">{!query && <button onClick={() => chooseSectionIcon(filter, heading, HeadingIcon)}><Palette size={14} />Icon &amp; color…</button>}<button onClick={() => { setFilter(filter === 'trash' ? 'all' : 'trash'); setFolderMenu(false); }}><Trash2 size={14} />{filter === 'trash' ? 'All notes' : 'View Trash'}</button>{activeFolder && <><button onClick={() => { act(api.importMarkdown(activeFolder.id), 'Markdown imported'); setFolderMenu(false); }}><FileText size={14} />Import Markdown here…</button><button onClick={() => { act(api.exportMarkdown({ folderId: activeFolder.id }), 'Markdown exported'); setFolderMenu(false); }}><Download size={14} />Export folder as Markdown…</button></>}{activeFolder && activeFolder.id !== 'inbox' && <><button onClick={() => { setFolderDialog({ initial: activeFolder }); setFolderMenu(false); }}><Folder size={14} />Rename folder</button><button onClick={async () => { const result = await act(api.deleteFolder(activeFolder.id), 'Notes moved to Inbox'); if (result) setFilter('inbox'); setFolderMenu(false); }}><Inbox size={14} />Remove folder · keep notes</button></>}</div>}</div></div></div>
+      onClick={() => selectFolder(f.id)}><NodeIcon icon={(f.id === 'all' ? state.sectionAppearances.all : f)?.icon} iconColor={(f.id === 'all' ? state.sectionAppearances.all : f)?.iconColor} fallback={f.id === 'all' ? FileText : f.id === 'inbox' ? Inbox : Folder} className="folder-glyph" size={14} />{f.name}</button>)}<IconButton label="New folder" onClick={() => setFolderDialog({})}><Plus size={15} /></IconButton></nav>
+    {subRows.map(({ parent, selected, children }) => <nav key={parent.id} className="subfolders" aria-label={`Folders in ${parent.name}`} data-parent-id={parent.id}>
+      <button className={`subfolder-tab ${selected === parent.id ? 'selected' : ''}`} data-subfolder-all={parent.id} aria-label={`All of ${parent.name}`} onClick={() => { setFilter(parent.id); setFolderMenu(false); }}>All</button>
+      {children.map(f => <button key={f.id} data-folder-id={f.id} style={folderTint(f)} className={`subfolder-tab hue-${folderHue(f.color)} ${selected === f.id ? 'selected' : ''} ${reorder.className('tab', f.id)}`} draggable title="Drag to reorder · Option ←/→" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
+        onDragStart={e => reorder.start(e, 'tab', f.id)} onDragEnd={reorder.end} onDragOver={e => reorder.over(e, 'tab', f.id, 'x')} onDrop={e => reorder.drop(e, 'tab', f.id, 'x')} onDragLeave={e => reorder.leave(e, 'tab', f.id)} onKeyDown={e => reorder.keyboard(e, 'tab', f.id, children.map(tab => tab.id), 'x')}
+        onContextMenu={e => { e.preventDefault(); chooseSectionIcon(f.id, f.name, Folder); }}
+        onClick={() => selectFolder(f.id)}><NodeIcon icon={f.icon} iconColor={f.iconColor} fallback={Folder} className="folder-glyph" size={12} />{f.name}</button>)}
+      {folderDepth(state.folders, parent.id) < MAX_FOLDER_DEPTH && <IconButton label={`New folder in ${parent.name}`} onClick={() => setFolderDialog({ parentId: parent.id })}><Plus size={13} /></IconButton>}
+    </nav>)}
+    <div className={`section-heading hue-${headingHue}`} style={folderTint(activeFolder)}><div><NodeIcon icon={query ? null : sectionAppearance.icon} iconColor={query ? null : sectionAppearance.iconColor} fallback={HeadingIcon} className="heading-glyph" size={15} /><h2>{heading}</h2><span className="count">{cards.length}</span></div><div className="section-tools"><IconButton label={filter === 'pinned' ? 'Show all notes' : 'Show pinned notes'} className={`icon-button ${filter === 'pinned' ? 'active' : ''}`} onClick={() => setFilter(filter === 'pinned' ? 'all' : 'pinned')}><Pin size={14} /></IconButton><div className="menu-wrap"><IconButton label="Notebook options" onClick={() => setFolderMenu(!folderMenu)}><MoreHorizontal size={17} /></IconButton>{folderMenu && <div className="popup-menu notebook-menu">{!query && <button onClick={() => chooseSectionIcon(filter, heading, HeadingIcon)}><Palette size={14} />Icon &amp; color…</button>}<button onClick={() => { setFilter(filter === 'trash' ? 'all' : 'trash'); setFolderMenu(false); }}><Trash2 size={14} />{filter === 'trash' ? 'All notes' : 'View Trash'}</button>{activeFolder && <><button onClick={() => { act(api.importMarkdown(activeFolder.id), 'Markdown imported'); setFolderMenu(false); }}><FileText size={14} />Import Markdown here…</button><button onClick={() => { act(api.exportMarkdown({ folderId: activeFolder.id }), 'Markdown exported'); setFolderMenu(false); }}><Download size={14} />Export folder as Markdown…</button></>}{activeFolder && folderDepth(state.folders, activeFolder.id) < MAX_FOLDER_DEPTH && <button onClick={() => { setFolderDialog({ parentId: activeFolder.id }); setFolderMenu(false); }}><FolderPlus size={14} />New folder inside…</button>}{activeFolder && activeFolder.id !== 'inbox' && <><button onClick={() => { setFolderDialog({ initial: activeFolder }); setFolderMenu(false); }}><Folder size={14} />Rename or move folder…</button><button onClick={async () => { const parent = state.folders.find(f => f.id === activeFolder.parentId); const result = await act(api.deleteFolder(activeFolder.id), `Notes moved to ${parent?.name || 'Inbox'}`); if (result) setFilter(result.movedTo); setFolderMenu(false); }}><Inbox size={14} />Remove folder · keep notes</button></>}</div>}</div></div></div>
     </div>
     {state.demo && <div className="demo-banner" role="status"><span>Demo notebook</span><button aria-label="Leave demo notebook" onClick={() => changeDemo(false)}>Exit demo<ArrowLeft size={12} /></button></div>}
-    <div className="notes-scroll" onDragOver={event => { if (event.dataTransfer.types.includes('Files') && !event.target.closest('.note-card')) event.preventDefault(); }} onDrop={event => {
+    <div className="notes-scroll" onContextMenu={paneContextMenu} onScroll={() => setPaneMenu(null)} onDragOver={event => { if (event.dataTransfer.types.includes('Files') && !event.target.closest('.note-card')) event.preventDefault(); }} onDrop={event => {
       if (event.target.closest('.note-card')) return;
       event.preventDefault(); const files = Array.from(event.dataTransfer.files);
       if (files.length) act(api.dropMarkdown(files, activeFolder?.id || 'inbox'), 'Markdown imported');
     }}>
       {draftExists && !editor && <button className="draft-notice" onClick={() => openEditor()}>You have an unfinished thought.<span>Continue <ArrowRight size={12} /></span></button>}
       {filter === 'trash' && <p className="trash-caption">Deleted notes stay here until you restore them.</p>}
-      {cards.length ? cards.map(note => note.editing ? <Editor key={editor.key} ref={editingSession} initial={editor.initial} focus={editor.focus} folders={state.folders} close={() => finishEditor(editor.key)} act={act} draftKey={draftKey} onIdentityChange={id => setEditorId(id || null)} folderTint={folderTint} chooseIcon={chooseNoteIcon} suspended={Boolean(iconTarget || overlay || folderDialog)} /> : <NoteCard key={note.id} note={note} folder={state.folders.find(f => f.id === note.folderId)} edit={openEditor} act={act} trashView={filter === 'trash'} reorder={reorder} noteIds={noteIds} chooseIcon={chooseNoteIcon} query={query.trim()} showHistory={note => { setHistoryNote(note); setOverlay('history'); }} folderTint={folderTint(state.folders.find(f => f.id === note.folderId))} />) : <div className="empty-state"><span><FileText size={26} strokeWidth={1} /></span><h3>{query ? 'A thought yet to be found.' : filter === 'trash' ? 'A clean little corner.' : filter === 'pinned' ? 'Keep the good things close.' : 'Room for a new thought.'}</h3><p>{query ? 'Try another word or look in all notes.' : filter === 'pinned' ? 'Pin a note from its menu to find it here.' : filter === 'trash' ? 'Notes you remove will appear here.' : 'A blank page is a lovely place to start.'}</p>{!query && !['trash', 'pinned'].includes(filter) && <button onClick={addNote}>Write a note<ArrowRight size={14} /></button>}</div>}
+      {listItems.length ? listItems.map(note => note.divider ? <SectionDivider key={note.id} divider={note} act={act} api={api} reorder={reorder} noteIds={noteIds} editing={editingDivider === note.id} setEditing={setEditingDivider} openMenu={dividerMenu} /> : note.editing ? <Editor key={editor.key} ref={editingSession} initial={editor.initial} focus={editor.focus} folders={state.folders} close={() => finishEditor(editor.key)} act={act} draftKey={draftKey} onIdentityChange={id => setEditorId(id || null)} folderTint={folderTint} chooseIcon={chooseNoteIcon} suspended={Boolean(iconTarget || overlay || folderDialog)} /> : <NoteCard key={note.id} note={note} folder={state.folders.find(f => f.id === note.folderId)} edit={openEditor} act={act} trashView={filter === 'trash'} reorder={reorder} noteIds={noteIds} chooseIcon={chooseNoteIcon} query={query.trim()} showHistory={note => { setHistoryNote(note); setOverlay('history'); }} folderTint={folderTint(state.folders.find(f => f.id === note.folderId))} />) : <div className="empty-state"><span><FileText size={26} strokeWidth={1} /></span><h3>{query ? 'A thought yet to be found.' : filter === 'trash' ? 'A clean little corner.' : filter === 'pinned' ? 'Keep the good things close.' : 'Room for a new thought.'}</h3><p>{query ? 'Try another word or look in all notes.' : filter === 'pinned' ? 'Pin a note from its menu to find it here.' : filter === 'trash' ? 'Notes you remove will appear here.' : 'A blank page is a lovely place to start.'}</p>{!query && !['trash', 'pinned'].includes(filter) && <button onClick={addNote}>Write a note<ArrowRight size={14} /></button>}</div>}
     </div>
     <div className="bottom-area"><button className="new-note" onClick={addNote}><span><Plus size={17} />Jot something down</span><kbd>⌘ N</kbd></button><footer className="panel-tools"><button className="connect-banner" aria-label="Connect assistants" onClick={() => setOverlay('connections')}><Sparkles size={15} strokeWidth={1.6} /><span>Assistants</span></button><span className="panel-save-status"><i />Saved locally</span><IconButton label="Recent activity" onClick={() => setOverlay('activity')}><MoreHorizontal size={17} /></IconButton><IconButton label="Preferences" onClick={() => setOverlay('settings')}><Settings size={17} strokeWidth={1.6} /></IconButton></footer></div>
     {overlay === 'connections' && <Connections close={close} act={act} />}
@@ -504,7 +564,8 @@ function App() {
     {overlay === 'backups' && <BackupTools api={api} act={act} close={close} demo={Boolean(state.demo)} Markdown={Markdown} />}
     {overlay === 'themes' && <Themes state={state} api={api} act={act} reducedTransparency={reducedTransparency} back={() => setOverlay('settings')} />}
     {overlay === 'activity' && <section className="overlay" role="dialog" aria-modal="true" aria-label="Recent activity"><div className="overlay-top"><IconButton label="Back to notes" onClick={close}><ArrowLeft size={19} /></IconButton><span>Recent activity</span><span /></div><div className="activity-content"><h1>A few little changes.</h1><p className="subtle">Notes added by you and your assistants.</p>{state.activity.length ? state.activity.map(a => <div className="activity-row" key={a.id}><span className="activity-icon">{a.source === 'You' ? <FileText size={16} /> : <Sparkles size={16} />}</span><div><strong>{a.title}</strong><span>{a.source} {a.action}</span><small>{new Date(a.at).toLocaleString()}</small></div></div>) : <div className="empty-state"><p>Your next thought starts the story.</p></div>}</div></section>}
-    {folderDialog && <FolderDialog initial={folderDialog.initial} close={() => setFolderDialog(null)} act={act} select={setFilter} />}
+    {folderDialog && <FolderDialog initial={folderDialog.initial} parentId={folderDialog.parentId} folders={state.folders} close={() => setFolderDialog(null)} act={act} select={setFilter} />}
+    {paneMenu && <ContextMenu menu={paneMenu} close={() => setPaneMenu(null)} />}
     {iconTarget && <IconPicker key={`${iconTarget.kind}:${iconTarget.id || 'draft'}`} target={iconTarget} close={() => setIconTarget(null)} api={api} />}
     {toast && <div className="toast" role="status"><Check size={14} /><span>{toast}</span><IconButton label="Dismiss message" onClick={() => setToast('')}><X size={13} /></IconButton></div>}
   </main></TaskLinksContext.Provider>;

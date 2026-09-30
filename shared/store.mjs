@@ -254,15 +254,15 @@ export class NoteStore {
       Object.assign(folder, appearance); return folder;
     });
   }
-  async renameFolder(id, name) {
-    const folder = (await this.read()).folders.find(f => f.id === id);
-    return this.updateFolder(id, { name, parentId: folder?.parentId ?? null });
-  }
-  // Rename a folder and choose where it sits: the top level or inside another folder.
-  async updateFolder(id, { name, parentId = null }) {
+  async renameFolder(id, name) { return this.updateFolder(id, { name }); }
+  // Rename a folder and choose where it sits: null is the top level, and an
+  // omitted parentId leaves it where it is.
+  async updateFolder(id, { name, parentId } = {}) {
+    if (parentId !== undefined && parentId !== null && typeof parentId !== 'string') throw new Error('Choose a folder to move this into.');
     return this.mutate(state => {
       const folder = state.folders.find(f => f.id === id);
       if (!folder || id === 'inbox') throw new Error('The Inbox cannot be renamed or moved.');
+      if (parentId === undefined) parentId = folder.parentId ?? null;
       const cleanName = typeof name === 'string' ? name.trim() : '';
       if (!cleanName || cleanName.length > 200) throw new Error('Enter a valid folder name.');
       if (parentId !== (folder.parentId ?? null)) {

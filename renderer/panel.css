@@ -93,3 +93,28 @@
 
 .reset-confirmation-backdrop { position: absolute; inset: 0; z-index: 20; background: #0003; backdrop-filter: blur(2px); }
 .app-shell:has(.reset-confirmation-backdrop) > .toast { display: none; }
+
+/* Sub-tabs for folders inside the selected folder, one row per level. */
+.subfolders { display: flex; gap: 3px; align-items: center; padding: 8px 17px; overflow-x: auto; scrollbar-width: none; flex-shrink: 0; border-bottom: 1px solid var(--line); }
+.subfolders > .subfolder-tab { display: flex; align-items: center; gap: 5px; font-size: 10px; white-space: nowrap; padding: 5px 8px; min-height: 25px; border-radius: 6px; color: var(--muted); position: relative; }
+.subfolders > .subfolder-tab:hover { background: var(--soft); color: var(--text); }
+.subfolders > .subfolder-tab.selected { background: var(--soft); color: var(--text); font-weight: 600; }
+.subfolders > .subfolder-tab[draggable="true"] { cursor: grab; }
+.subfolders > .icon-button { width: 23px; height: 23px; }
+.subfolder-tab.drop-before::before, .subfolder-tab.drop-after::after { content: ""; position: absolute; top: 3px; bottom: 3px; width: 2px; background: var(--green); border-radius: 2px; pointer-events: none; }
+.subfolder-tab.drop-before::before { left: 0; }
+.subfolder-tab.drop-after::after { right: 0; }
+:root[data-material=glass] .subfolders { border-bottom: 0; }
+.folder-parent { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 10px; color: var(--muted); margin: -8px 0 19px; }
+.folder-parent select { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 6px; padding: 7px; font-size: 11px; }
+
+/* Section dividers: a quiet line among the notes, optionally labelled. */
+.note-divider { position: relative; display: flex; align-items: center; gap: 9px; min-height: 22px; margin: 4px 2px 13px; color: var(--muted); font-size: 9px; font-weight: 600; letter-spacing: .9px; text-transform: uppercase; cursor: grab; outline: none; border-radius: 4px; }
+.note-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.note-divider:focus-visible { box-shadow: 0 0 0 2px var(--green); }
+.note-divider-label { max-width: 75%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-divider input { flex: 0 1 60%; min-width: 0; border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 5px; padding: 4px 6px; font: inherit; letter-spacing: .4px; text-transform: none; font-weight: 500; font-size: 11px; outline: none; }
+.note-divider.drop-before::before, .note-divider.drop-after::before { content: ""; position: absolute; left: 0; right: 0; height: 2px; background: var(--green); border-radius: 2px; pointer-events: none; }
+.note-divider.drop-before::before { top: -6px; }
+.note-divider.drop-after::before { bottom: -8px; }
+.context-menu { position: fixed; right: auto; top: auto; z-index: 30; }

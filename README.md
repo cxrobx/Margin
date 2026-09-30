@@ -26,6 +26,10 @@ Markdown renders as you type: headings, lists, checklists, quotes, bold, italic,
 
 The panel includes Markdown notes, interactive tasks, folders, six note colors, pinning and folding, search, code blocks, links, image/file attachments, recoverable Trash, recent activity, light/dark/system themes, and optional screen-edge activation. Drag a note by its header, title, or card edge to reorder it; drag folder tabs (including All) to rearrange them. A line marks the insertion point, and both orders are saved locally. Editing a note keeps its manual position; pinning still brings it to the top. With a card or tab focused, Option + arrow keys also reorder it (up/down for notes, left/right for tabs). Drag files onto an existing note to attach them. Attachments are copied locally, up to 25 MB each.
 
+Folders nest up to three levels. Choose **New folder inside…** from **Notebook options**, or the **+** at the end of a sub-tab row; **Rename or move folder…** changes where a folder sits. Selecting a folder shows its own notes and every folder inside it, with a row of sub-tabs (**All** plus each child) for each level. Each parent remembers the sub-tab you chose last, **All** or a child, so clicking it returns you there. Removing a subfolder moves its notes and folders up into its parent; removing a top-level folder moves its notes to the Inbox.
+
+Right-click free space among the notes and choose **Add section here** to place a divider at that spot. Name it, or leave it as a plain line; double-click or right-click a section to rename or remove it, and drag it (or focus it and press Option ↑/↓) like a note. A section belongs to the view it was added in and steps aside during search, Pinned, and Trash.
+
 Choose **Icon & color…** from a note’s menu or the section’s **Notebook options** menu, or right-click a folder tab. The note editor also has an **Icon & color** button. Like CXTasks, the compact picker saves each choice immediately: built-in glyphs, an imported PNG/JPEG, a separate icon color, and **Reset to default**. Image icons keep their own colors; imports are trimmed and stored locally as 64-pixel PNGs, with an optional background-free variant. Folder tabs and headings share their appearance; All, Pinned, and Trash can each have their own icon too. Note types and card colors stay independent. Icons survive reopening and stay separate in demo mode.
 
 ## Linking documents and tasks
@@ -88,7 +92,7 @@ Connection references: [official Codex MCP documentation](https://developers.ope
 
 | Tool | Purpose |
 | --- | --- |
-| `list_folders` / `create_folder` | Find or create folders |
+| `list_folders` / `create_folder` | Find or create folders, including folders inside folders (`parentId`) |
 | `list_notes` | Search content, with folder, pinned, Trash, and pagination filters |
 | `read_note` | Get the full body, attachments, and current revision |
 | `duplicate_note` / `note_link` | Copy a note or get its app link |
@@ -146,6 +150,8 @@ The tests exercise actual stdio MCP requests, multiprocess writes, task handling
 ```sh
 MARGIN_SMOKE_TEST=1 MARGIN_DATA_DIR=/private/tmp/margin-electron-smoke node_modules/.bin/electron .
 ```
+
+Add `MARGIN_FOLDERS_SMOKE_TEST=1` to drive nested folders, remembered sub-tabs, and sections instead (`MARGIN_FEATURE_SMOKE_TEST=1` and `MARGIN_LINK_SMOKE_TEST=1` select the other suites).
 
 Use a fresh directory for each smoke run. Screenshots are written to `artifacts/`. Development profiles, local notes, output bundles, and dependencies are ignored by Git.
 

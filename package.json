@@ -67,6 +67,7 @@
       "scripts/features-smoke.mjs",
       "integrations/alfred/capture.js",
       "scripts/links-smoke.mjs",
+      "scripts/folders-smoke.mjs",
       "LICENSE"
     ],
     "mac": {

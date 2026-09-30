@@ -43,6 +43,8 @@ test('moving a folder never creates a loop or exceeds the depth cap', async t =>
   await assert.rejects(() => store.updateFolder(a.id, { name: 'A', parentId: a.id }), /inside itself/);
   // A has one level below it; under D it would be four levels deep.
   await assert.rejects(() => store.updateFolder(a.id, { name: 'A', parentId: d.id }), /three levels/);
+  assert.equal((await store.renameFolder(b.id, 'Beta')).parentId, a.id, 'Renaming keeps a folder where it is');
+  await store.renameFolder(b.id, 'B');
   const moved = await store.updateFolder(a.id, { name: 'Alpha', parentId: c.id });
   assert.deepEqual([moved.name, moved.parentId], ['Alpha', c.id]);
   assert.equal(folderLabel((await store.read()).folders, b.id), 'C / Alpha / B');

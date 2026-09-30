@@ -270,8 +270,12 @@ if (store && settings) {
   register('notes:trash', id => store.trash(id));
   register('notes:restore', id => store.restore(id));
   register('notes:task', (id, line, done, expectedRevision) => store.toggleTask(id, line, done, expectedRevision));
-  register('folders:create', (name, color) => store.createFolder(name, color));
+  register('folders:create', (name, color, parentId) => store.createFolder(name, color, parentId ?? null));
   register('folders:rename', (id, name) => store.renameFolder(id, name));
+  register('folders:update', (id, name, parentId) => store.updateFolder(id, { name, parentId }));
+  register('dividers:create', (view, label, targetId, placement) => store.createDivider({ view, label, targetId, placement }));
+  register('dividers:rename', (id, label) => store.renameDivider(id, label));
+  register('dividers:delete', id => store.deleteDivider(id));
   register('folders:delete', id => store.deleteFolder(id));
   register('settings:set', async patch => {
     if (patch.cxtasksLinks === true && !(await installedLinkApps()).cxtasks) throw new Error('Install CXTasks to enable task links.');
@@ -392,7 +396,7 @@ if (store && settings) {
   if (settings.themeId === 'vault') refreshVaultTheme().catch(console.error);
   if (process.env.MARGIN_SMOKE_TEST) console.log('Smoke: renderer loaded');
   if (process.env.MARGIN_SMOKE_TEST) {
-    const { runSmoke } = await import(process.env.MARGIN_LINK_SMOKE_TEST ? '../scripts/links-smoke.mjs' : process.env.MARGIN_FEATURE_SMOKE_TEST ? '../scripts/features-smoke.mjs' : '../scripts/smoke.mjs');
+    const { runSmoke } = await import(process.env.MARGIN_LINK_SMOKE_TEST ? '../scripts/links-smoke.mjs' : process.env.MARGIN_FEATURE_SMOKE_TEST ? '../scripts/features-smoke.mjs' : process.env.MARGIN_FOLDERS_SMOKE_TEST ? '../scripts/folders-smoke.mjs' : '../scripts/smoke.mjs');
     try { await runSmoke(win, store, { edgeBars, show, hide, toggle, motion: panelMotion, material: windowMaterial, linkLaunches }); app.quit(); }
     catch (e) {
       console.error(e);
