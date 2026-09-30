@@ -4,7 +4,7 @@ A local macOS screen-edge notebook with Markdown, Alfred quick capture, and a bu
 
 ## Download
 
-The first packaged release is being prepared and awaits Apple notarization. You can [build from source](#develop-and-verify) now; Mac downloads will be available in [GitHub Releases](https://github.com/cxrobx/Margin/releases). Margin requires macOS 13 or newer. Open the disk image and drag **Margin Notes** to Applications, or unzip the app and move it there. No Node.js installation is needed to run the packaged app. The release also includes the optional Alfred 5 quick-capture workflow.
+Download [Margin Notes v0.1.0 for Apple Silicon](https://github.com/cxrobx/Margin/releases/tag/v0.1.0). Margin requires macOS 13 or newer. Open the disk image and drag **Margin Notes** to Applications, or unzip the app and move it there. No Node.js installation is needed to run the packaged app. The release also includes the optional Alfred 5 quick-capture workflow. The app and disk image are Developer ID signed; Apple notarization is pending, so macOS may require manual approval to open this version. You can also [build from source](#develop-and-verify).
 
 ## Use the app
 
