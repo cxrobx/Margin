@@ -2,13 +2,16 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { clipboard, ClipboardItem, nativeImage } from 'electron';
+import { app, clipboard, ClipboardItem, nativeImage } from 'electron';
 
 export async function runSmoke(win, store, panel) {
   const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
   const output = process.env.MARGIN_ARTIFACTS_DIR || path.join(root, 'artifacts');
   await fs.mkdir(output, { recursive: true });
-  const run = code => win.webContents.executeJavaScript(`{ ${code} }`, true);
+  const run = code => {
+    if (panel.motion.visible && win.isVisible()) { app.focus({ steal: true }); win.focus(); win.webContents.focus(); }
+    return win.webContents.executeJavaScript(`{ ${code} }`, true);
+  };
   const wait = async code => {
     for (let attempt = 0; attempt < 100; attempt++) {
       if (await run(code)) return;

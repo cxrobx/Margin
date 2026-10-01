@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { app } from 'electron';
 
 // Nested folders, each parent's remembered sub-tab, and section dividers, driven through the panel.
 export async function runSmoke(win, store, panel) {
-  const run = code => win.webContents.executeJavaScript(`{ ${code} }`, true).catch(e => { throw new Error(`Renderer check failed: ${code}\n${e.message}`); });
+  const run = code => {
+    if (panel.motion.visible && win.isVisible()) { app.focus({ steal: true }); win.focus(); win.webContents.focus(); }
+    return win.webContents.executeJavaScript(`{ ${code} }`, true).catch(e => { throw new Error(`Renderer check failed: ${code}\n${e.message}`); });
+  };
   const wait = async code => { for (let i = 0; i < 80; i++) { if (await run(code)) return; await new Promise(resolve => setTimeout(resolve, 100)); } throw new Error(`Timed out: ${code}`); };
   const screenshot = async name => { const dir = process.env.MARGIN_ARTIFACTS_DIR || path.join(store.dir, 'artifacts'); await fs.mkdir(dir, { recursive: true }); await new Promise(r => setTimeout(r, 200)); await fs.writeFile(path.join(dir, name), (await win.webContents.capturePage()).toPNG()); };
   const top = name => run(`Array.from(document.querySelectorAll('.folders > .folder-tab')).find(el => el.textContent === ${JSON.stringify(name)}).click()`);

@@ -22,6 +22,8 @@ export async function richSmoke({ win, store, client, run, waitFor, click, scree
     return note;
   };
   const open = async note => {
+    focus();
+    await waitFor(`document.hasFocus()`);
     await run(`document.querySelector('[data-note-id="${note.id}"] .card-title').dispatchEvent(new MouseEvent('dblclick', {bubbles:true,detail:2}))`);
     await waitFor(`Boolean(document.querySelector('.rich-body')?.editor)`);
   };
@@ -434,7 +436,7 @@ export async function richSmoke({ win, store, client, run, waitFor, click, scree
   console.log('Rich editor smoke passed: native formatting shortcuts, every toolbar tooltip, selected-text and caret link editing/insertion/removal, native Cmd N creation from search and Preferences, draft flushing before the next note, native bottom-edge resize dragging in reading and editing modes, saved heights, folding, Escape cancellation, keyboard sizing and automatic-height reset, inline creation and editing, live typed/pasted Markdown, Escape and outside-click flushing, automatic updates, immediate-close flushing, inline autosave, conflict recovery, stronger dark highlights, floating toolbar, marks, links, lists, headings, code, Markdown round-trip, native title/search undo, body typing and formatting undo and redo, sanitization, and MCP readability.');
   } catch (error) {
     console.error('Rich editor check failed:', error);
-    console.log('Formatting focus:', await run(`({active:document.activeElement?.tagName, activeLabel:document.activeElement?.getAttribute('aria-label'), link:document.querySelector('.bubble-link')?.outerHTML, selection:document.querySelector('.rich-body')?.editor?.state.selection.toJSON()})`));
+    console.log('Formatting focus:', await run(`({documentFocus:document.hasFocus(),active:document.activeElement?.tagName, activeLabel:document.activeElement?.getAttribute('aria-label'), link:document.querySelector('.bubble-link')?.outerHTML, selection:document.querySelector('.rich-body')?.editor?.state.selection.toJSON(),caretHidden:document.querySelector('.note-caret')?.hidden})`));
     throw error;
   }
   finally { if (priorClipboard.length) await clipboard.write(priorClipboard); else clipboard.clear(); }

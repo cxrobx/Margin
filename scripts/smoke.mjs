@@ -12,7 +12,12 @@ import { richSmoke } from './rich-smoke.mjs';
 export async function runSmoke(win, store, panel) {
   const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
   const output = process.env.MARGIN_ARTIFACTS_DIR || path.join(root, 'artifacts'); await fs.mkdir(output, { recursive: true });
-  const run = code => win.webContents.executeJavaScript(`{ ${code} }`, true).catch(e => { throw new Error(`Renderer check failed: ${code}\n${e.message}`); });
+  const run = code => {
+    // Native checks need the test panel to own keyboard focus. A nonactivating
+    // panel can otherwise lose focus between simulated input and its assertion.
+    if (panel.motion.visible && win.isVisible()) { app.focus({ steal: true }); win.focus(); win.webContents.focus(); }
+    return win.webContents.executeJavaScript(`{ ${code} }`, true).catch(e => { throw new Error(`Renderer check failed: ${code}\n${e.message}`); });
+  };
   const waitFor = async code => { for (let i = 0; i < 80; i++) { if (await run(code)) return; await new Promise(r => setTimeout(r, 100)); } throw new Error(`Timed out: ${code}`); };
   const waitNative = async check => { for (let i = 0; i < 800; i++) { if (check()) return; await new Promise(r => setTimeout(r, 10)); } throw new Error('Timed out waiting for the native panel'); };
   const click = label => run(`Array.from(document.querySelectorAll('[aria-label]')).find(el=>el.getAttribute('aria-label')===${JSON.stringify(label)}).click()`);
