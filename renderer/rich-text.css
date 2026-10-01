@@ -59,3 +59,8 @@
 .inline-color-options .swatch { width: 23px; height: 23px; padding: 0; border-radius: 50%; display: flex; justify-content: center; }
 
 .inline-note-icon { display: inline-flex; align-items: center; padding: 0; color: inherit; }
+
+.note-inline-image { display: block; max-width: 100%; height: auto; border-radius: 6px; margin: 9px 0; }
+.rich-body .note-inline-image.ProseMirror-selectednode { outline: 2px solid var(--green); outline-offset: 2px; }
+.note-image-button { display: block; max-width: 100%; padding: 0; text-align: left; }
+.note-image-button:focus-visible { outline: 2px solid var(--green); border-radius: 6px; }

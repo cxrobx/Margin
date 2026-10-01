@@ -11,6 +11,7 @@ import { TableKit } from '@tiptap/extension-table';
 import Image from '@tiptap/extension-image';
 import { safeAppHref } from '../shared/app-links.mjs';
 import { formattingActions } from './rich-shortcuts.mjs';
+import { attachmentUrl, imageAttachmentId } from '../shared/attachments.mjs';
 
 const FormattingShortcuts = Extension.create({
   name: 'marginFormattingShortcuts',
@@ -35,8 +36,44 @@ const MarkdownHighlight = Highlight.extend({
   renderMarkdown: (node, helpers) => `<mark>${helpers.renderChildren(node)}</mark>`
 });
 // Preserve image Markdown without fetching remote images while editing.
-const LocalImagePlaceholder = Image.extend({
-  renderHTML: ({ node }) => ['span', { class: 'remote-image', 'data-remote-src': node.attrs.src }, `${node.attrs.alt || 'Image'} · Attach images locally to preview them`]
+const LocalImage = Image.extend({
+  renderHTML: ({ node }) => imageAttachmentId(node.attrs.src)
+    ? ['img', { src: node.attrs.src, alt: node.attrs.alt || '', title: node.attrs.title, class: 'note-inline-image' }]
+    : ['span', { class: 'remote-image', 'data-remote-src': node.attrs.src }, `${node.attrs.alt || 'Image'} · Attach images locally to preview them`]
+});
+const ImagePaste = Extension.create({
+  name: 'marginImagePaste',
+  priority: 1100,
+  addOptions() { return { pasteImage: null }; },
+  addProseMirrorPlugins() {
+    const editor = this.editor, pasteImage = this.options.pasteImage;
+    const bookmarks = new Map();
+    return [new Plugin({
+      state: { init: () => null, apply: transaction => {
+        for (const [key, bookmark] of bookmarks) bookmarks.set(key, bookmark.map(transaction.mapping));
+        return null;
+      } },
+      props: { handlePaste(view, event) {
+        if (!pasteImage) return false;
+        const files = Array.from(event.clipboardData?.files || []).filter(file => file.type.startsWith('image/'));
+        if (!files.length) return false;
+        event.preventDefault();
+        for (const file of files) {
+          const key = Symbol(); bookmarks.set(key, view.state.selection.getBookmark());
+          Promise.resolve(pasteImage(file, attachment => {
+            if (editor.isDestroyed) return;
+            const selection = bookmarks.get(key).resolve(editor.state.doc);
+            bookmarks.delete(key);
+            editor.commands.insertContentAt({ from: selection.from, to: selection.to }, [
+              { type: 'image', attrs: { src: attachmentUrl(attachment.id), alt: attachment.name } },
+              { type: 'paragraph' }
+            ]);
+          })).finally(() => bookmarks.delete(key)).catch(() => {});
+        }
+        return true;
+      } }
+    })];
+  }
 });
 // The bullet shortcut fires as soon as "- " is typed. Completing "[ ] "
 // converts that item into a task instead of nesting a checklist inside a bullet.
@@ -67,15 +104,15 @@ const MarkdownPaste = Extension.create({
     } } })];
   }
 });
-export function richExtensions(placeholder, editLink) {
+export function richExtensions(placeholder, editLink, pasteImage) {
   return [
     StarterKit.configure({
       underline: false, trailingNode: false,
       link: { openOnClick: false, autolink: true, markdownLinks: true, defaultProtocol: 'https', protocols: ['http', 'https', 'mailto', 'margin', 'file', 'obsidian', 'cxtasks'], isAllowedUri: value => Boolean(safeAppHref(value)) },
       undoRedo: { depth: 200, newGroupDelay: 500 }
     }),
-    FormattingShortcuts.configure({ editLink }), MarkdownPaste, MarkdownUnderline, MarkdownHighlight, TaskList, LiveTaskItem.configure({ nested: true, HTMLAttributes: { 'data-type': 'taskItem' } }),
-    TableKit.configure({ table: { resizable: false } }), LocalImagePlaceholder,
+    FormattingShortcuts.configure({ editLink }), ImagePaste.configure({ pasteImage }), MarkdownPaste, MarkdownUnderline, MarkdownHighlight, TaskList, LiveTaskItem.configure({ nested: true, HTMLAttributes: { 'data-type': 'taskItem' } }),
+    TableKit.configure({ table: { resizable: false } }), LocalImage,
     Placeholder.configure({ placeholder }), Markdown.configure({ markedOptions: { gfm: true } })
   ];
 }

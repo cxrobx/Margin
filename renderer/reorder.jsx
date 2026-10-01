@@ -10,8 +10,10 @@ export function useReorder(move, moveToFolder) {
     return (axis === 'x' ? event.clientX < bounds.left + bounds.width / 2 : event.clientY < bounds.top + bounds.height / 2) ? 'before' : 'after';
   };
   const matches = kind => sourceRef.current?.kind === kind;
-  const accepts = (kind, id) => kind === 'folder'
-    ? matches('note') && id !== 'all' && sourceRef.current.folderId !== id
+  // Folder tabs also receive notes; a divider has no folderId and only reorders.
+  const isFolderTarget = kind => kind === 'folder' || kind === 'tab' && matches('note');
+  const accepts = (kind, id) => isFolderTarget(kind)
+    ? matches('note') && Boolean(sourceRef.current.folderId) && id !== 'all' && sourceRef.current.folderId !== id
     : matches(kind);
   const start = (event, kind, id, folderId) => {
     event.stopPropagation();
@@ -23,10 +25,10 @@ export function useReorder(move, moveToFolder) {
     if (!accepts(kind, id)) return false;
     event.preventDefault(); event.stopPropagation();
     event.dataTransfer.dropEffect = 'move';
-    const next = sourceRef.current.id === id ? null : { kind, id, placement: kind === 'folder' ? 'folder' : placementAt(event, axis) };
+    const next = sourceRef.current.id === id ? null : { kind, id, placement: isFolderTarget(kind) ? 'folder' : placementAt(event, axis) };
     setTarget(previous => previous?.kind === next?.kind && previous?.id === next?.id && previous?.placement === next?.placement ? previous : next);
     // Native dragover keeps firing at the edge, even while the pointer rests.
-    const scroller = event.currentTarget.closest(axis === 'x' ? '.folders' : '.notes-scroll');
+    const scroller = event.currentTarget.closest(axis === 'x' ? '.folders, .subfolders' : '.notes-scroll');
     if (scroller) {
       const bounds = scroller.getBoundingClientRect();
       const pointer = axis === 'x' ? event.clientX : event.clientY;
@@ -41,9 +43,9 @@ export function useReorder(move, moveToFolder) {
     if (!accepts(kind, id)) return false;
     event.preventDefault(); event.stopPropagation();
     const dragged = sourceRef.current;
-    const placement = kind === 'folder' ? 'folder' : placementAt(event, axis);
+    const placement = isFolderTarget(kind) ? 'folder' : placementAt(event, axis);
     end();
-    if (kind === 'folder') moveToFolder(dragged.id, id);
+    if (placement === 'folder') moveToFolder(dragged.id, id);
     else if (dragged.id !== id) move(kind, dragged.id, id, placement);
     return true;
   };

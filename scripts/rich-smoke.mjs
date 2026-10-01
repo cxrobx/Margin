@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { Menu, clipboard, ClipboardItem } from 'electron';
+import { app, Menu, clipboard, ClipboardItem } from 'electron';
 
 // Integration checks use an isolated smoke notebook, the real native menu,
 // renderer, Markdown storage, and stdio MCP client.
@@ -7,9 +7,10 @@ export async function richSmoke({ win, store, client, run, waitFor, click, scree
   const priorClipboard = await Promise.all((await clipboard.read()).map(async item => new ClipboardItem(Object.fromEntries(await Promise.all(item.types.map(async type => [type, await item.getType(type)]))))));
   try {
   const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const focus = () => { app.focus({ steal: true }); win.focus(); };
   const menuEdit = action => Menu.getApplicationMenu().getMenuItemById(action).click();
   const shortcut = (keyCode, modifiers) => {
-    win.focus();
+    focus();
     win.webContents.sendInputEvent({ type: 'keyDown', keyCode, modifiers });
     win.webContents.sendInputEvent({ type: 'keyUp', keyCode, modifiers });
   };
@@ -24,7 +25,7 @@ export async function richSmoke({ win, store, client, run, waitFor, click, scree
     await run(`document.querySelector('[data-note-id="${note.id}"] .card-title').dispatchEvent(new MouseEvent('dblclick', {bubbles:true,detail:2}))`);
     await waitFor(`Boolean(document.querySelector('.rich-body')?.editor)`);
   };
-  const select = async (text, collapse = false) => { win.focus(); await run(`
+  const select = async (text, collapse = false) => { focus(); await run(`
     const ed = document.querySelector('.rich-body').editor;
     let found;
     ed.state.doc.descendants((node, pos) => { if (found == null && node.isText && node.text.includes(${JSON.stringify(text)})) found = pos + node.text.indexOf(${JSON.stringify(text)}); });
@@ -102,11 +103,12 @@ export async function richSmoke({ win, store, client, run, waitFor, click, scree
   await pause(100);
   assert.equal(await clipboard.readText(), 'A quiet thought for today.');
   const hover = async (label, expected = label) => {
-    win.focus();
+    focus();
     await waitFor(`document.hasFocus()`);
     await waitFor(visibleToolbar);
     await pause(100);
     const selector = `.format-bubble [aria-label=${JSON.stringify(label)}]`;
+    await waitFor(`Boolean(document.querySelector(${JSON.stringify(selector)})?.getClientRects().length)`);
     win.webContents.sendInputEvent({type:'mouseMove',x:0,y:0});
     const point = await run(`const b=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); ({x:b.left+b.width/2,y:b.top+b.height/2})`);
     win.webContents.sendInputEvent({type:'mouseMove',x:Math.round(point.x),y:Math.round(point.y)});
@@ -118,7 +120,7 @@ export async function richSmoke({ win, store, client, run, waitFor, click, scree
   for (const [label, keys] of [['Copy selected text','⌘C'],['Lists',''],['Text style',''],['Blockquote','⌘⇧B'],['Bold','⌘B'],['Italic','⌘I'],['Highlight','⌘⇧H'],['Strikethrough','⌘⇧S'],['Underline','⌘U'],['Edit link','⌘K'],['Inline code','⌘E'],['Code block','⌘⌥C'],['Clear formatting','⌘\\']]) await hover(label, label + keys);
   await hover('Bold', 'Bold⌘B');
   await screenshot('margin-formatting-shortcuts.png');
-  win.focus();
+  focus();
   await waitFor(visibleToolbar);
   assert.equal(await run(`const ed=document.querySelector('.rich-body').editor; ed.state.doc.textBetween(ed.state.selection.from,ed.state.selection.to)`), 'A quiet thought for today.', 'Hovering toolbar items preserves the selected text');
   assert.equal(await run(`document.querySelector('.format-bubble [aria-label="Bold"]').getAttribute('aria-keyshortcuts')`), 'Meta+B');

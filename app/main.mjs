@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, screen, nativeImage, nativeTheme, clipboard, dialog, shell, protocol, autoUpdater as nativeUpdater } from 'electron';
+import { MAX_ATTACHMENT_BYTES } from '../shared/attachments.mjs';
 import { fileURLToPath } from 'node:url';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -315,6 +316,12 @@ if (store && settings) {
     for (const file of files) note = await store.attach(id, file);
     return note;
   });
+  register('notes:paste-image', async (id, image, expectedRevision) => {
+    if (!(image?.bytes instanceof Uint8Array) || !image.bytes.length || image.bytes.length > MAX_ATTACHMENT_BYTES) throw new Error('Images are limited to 25 MB.');
+    const decoded = nativeImage.createFromBuffer(Buffer.from(image.bytes));
+    if (decoded.isEmpty()) throw new Error('Couldn’t read the pasted image.');
+    return store.attachImage(id, decoded.toPNG(), image.name, expectedRevision);
+  });
   register('app:attachment', async id => {
     const file = await store.attachmentPath(id);
     const error = await shell.openPath(file.path); if (error) throw new Error(error);
@@ -408,7 +415,7 @@ if (store && settings) {
   updater.start();
   if (process.env.MARGIN_SMOKE_TEST) console.log('Smoke: renderer loaded');
   if (process.env.MARGIN_SMOKE_TEST) {
-    const { runSmoke } = await import(process.env.MARGIN_LINK_SMOKE_TEST ? '../scripts/links-smoke.mjs' : process.env.MARGIN_FEATURE_SMOKE_TEST ? '../scripts/features-smoke.mjs' : process.env.MARGIN_FOLDERS_SMOKE_TEST ? '../scripts/folders-smoke.mjs' : '../scripts/smoke.mjs');
+    const { runSmoke } = await import(process.env.MARGIN_IMAGE_SMOKE_TEST ? '../scripts/images-smoke.mjs' : process.env.MARGIN_LINK_SMOKE_TEST ? '../scripts/links-smoke.mjs' : process.env.MARGIN_FEATURE_SMOKE_TEST ? '../scripts/features-smoke.mjs' : process.env.MARGIN_FOLDERS_SMOKE_TEST ? '../scripts/folders-smoke.mjs' : '../scripts/smoke.mjs');
     try { await runSmoke(win, store, { edgeBars, show, hide, toggle, motion: panelMotion, material: windowMaterial, linkLaunches }); app.quit(); }
     catch (e) {
       console.error(e);

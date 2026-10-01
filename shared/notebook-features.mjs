@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { stateSchema, noteSchema, createNoteSchema } from './schema.mjs';
 import { descendantIds, folderTree, validateFolderTree } from './folders.mjs';
 import { orderNotes, withDividers } from './order.mjs';
+import { attachmentUrl, replaceAttachmentUrls } from './attachments.mjs';
 
 const LIMIT = 25 * 1024 * 1024;
 const uuid = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
@@ -130,6 +131,8 @@ export async function applyBackup(store, plan, mode, expectedRevision) {
         }
         Object.assign(attachment, attachmentMap.get(attachment.id));
       }
+      const urls = new Map(Array.from(attachmentMap, ([oldId, attachment]) => [oldId, attachmentUrl(attachment.id)]));
+      for (const note of incoming.notes) note.body = replaceAttachmentUrls(note.body, urls);
       if (mode === 'replace') {
         for (const key of ['notes', 'folders', 'dividers', 'noteOrder', 'tabOrder', 'sectionAppearances', 'activity']) state[key] = incoming[key];
         state.notebookId = randomUUID();
@@ -196,7 +199,7 @@ export async function importMarkdown(store, files, folderId = 'inbox', directori
       if (!assetStat.isFile() || assetStat.isSymbolicLink() || assetStat.size > LIMIT) throw new Error('Invalid Markdown attachment file.');
       totalBytes += assetStat.size;
       if (totalBytes > 100 * 1024 * 1024) throw new Error('Import up to 100 MB of Markdown attachments at once.');
-      assets.push({ file: asset, bytes: await fs.readFile(asset), name: path.basename(asset).replace(/^[a-f0-9]{8}-/, '') });
+      assets.push({ file: asset, url: match[1], bytes: await fs.readFile(asset), name: path.basename(asset).replace(/^[a-f0-9]{8}-/, '') });
     }
     inputs.push({ ...parsed, assets, folderName: directories && item.folderName ? item.folderName : null });
   }
@@ -218,6 +221,7 @@ export async function importMarkdown(store, files, folderId = 'inbox', directori
         const attachment = { id, name: asset.name, filename: id + ext, mime, size: asset.bytes.length };
         const target = path.join(store.dir, 'attachments', attachment.filename);
         await fs.writeFile(target, asset.bytes, { flag: 'wx', mode: 0o600 }); written.push(target); note.attachments.push(attachment);
+        if (mime.startsWith('image/')) note.body = note.body.replaceAll(`(${asset.url})`, `(${attachmentUrl(id)})`);
       }
       state.notes.push(note); state.noteOrder.push(note.id); store.event(state, 'imported', note, 'Markdown import'); created.push(note);
     }
@@ -251,7 +255,9 @@ export async function exportMarkdown(store, destination, { noteId, folderId } = 
         await fs.copyFile(await localAttachment(store, attachment), path.join(assets, name));
         const url = `attachments/${note.id}/${encodeURIComponent(name)}`;
         const label = attachment.name.replace(/[\[\]\\\n]/g, ' ');
-        links.push(`${attachment.mime.startsWith('image/') ? '!' : ''}[${label}](${url})`);
+        const localUrl = attachmentUrl(attachment.id);
+        if (note.body.includes(localUrl)) text = replaceAttachmentUrls(text, new Map([[attachment.id, url]]));
+        else if (!attachment.inline) links.push(`${attachment.mime.startsWith('image/') ? '!' : ''}[${label}](${url})`);
       }
       text += `\n${links.join('\n\n')}\n`;
     }

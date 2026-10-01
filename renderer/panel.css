@@ -63,7 +63,7 @@
 }
 .folder-tab.drop-before::before { left: 0; }
 .folder-tab.drop-after::after { right: 0; }
-.folders > .folder-tab.drop-folder {
+.folders > .folder-tab.drop-folder, .subfolders > .subfolder-tab.drop-folder {
   background: var(--soft);
   box-shadow: inset 0 0 0 2px var(--green);
 }

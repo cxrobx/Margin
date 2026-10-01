@@ -11,7 +11,7 @@ export default function NoteCaret({ card, bodyCaret, suspended }) {
     mirror.setAttribute('aria-hidden', 'true');
     mirror.style.cssText = 'position:fixed;left:0;top:0;visibility:hidden;white-space:pre;pointer-events:none;';
     document.body.append(mirror);
-    let frame = 0, composing = false, target = null;
+    let frame = 0, compositionTimer = null, composing = false, target = null;
     const hide = () => {
       caret.hidden = true;
       target?.classList.remove('has-note-caret'); target = null;
@@ -53,7 +53,12 @@ export default function NoteCaret({ card, bodyCaret, suspended }) {
     const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
     const moved = () => { caret.getAnimations().forEach(animation => { animation.currentTime = 0; }); schedule(); };
     const beginComposition = () => { composing = true; hide(); };
-    const endComposition = () => { composing = false; moved(); };
+    const endComposition = () => {
+      composing = false; moved();
+      // ProseMirror clears its composing flag after the DOM event. Measure
+      // again after that cleanup even when no further keystroke follows.
+      clearTimeout(compositionTimer); compositionTimer = setTimeout(moved, 50);
+    };
     const events = ['selectionchange', 'input', 'keydown', 'keyup', 'pointerup', 'focusin', 'focusout'];
     for (const name of events) document.addEventListener(name, moved);
     document.addEventListener('scroll', schedule, true);
@@ -65,7 +70,7 @@ export default function NoteCaret({ card, bodyCaret, suspended }) {
     const changes = new MutationObserver(schedule); changes.observe(root, { childList: true, characterData: true, subtree: true });
     schedule();
     return () => {
-      cancelAnimationFrame(frame); hide(); mirror.remove(); resize.disconnect(); changes.disconnect();
+      cancelAnimationFrame(frame); clearTimeout(compositionTimer); hide(); mirror.remove(); resize.disconnect(); changes.disconnect();
       for (const name of events) document.removeEventListener(name, moved);
       document.removeEventListener('scroll', schedule, true);
       root.removeEventListener('compositionstart', beginComposition);

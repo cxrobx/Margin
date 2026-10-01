@@ -10,6 +10,7 @@ import RichText from './RichText.jsx';
 import NoteCaret from './NoteCaret.jsx';
 import { useNoteResize, NoteResizeHandle } from './note-resize.jsx';
 import { NoteAutosave } from './note-autosave.mjs';
+import { imageAttachmentId, separateAttachments } from '../shared/attachments.mjs';
 import { Undo2, Redo2 } from 'lucide-react';
 import { ArrowLeft, ArrowRight, Check, CheckSquare, ChevronDown, ChevronRight, Code2, Copy, Download, FileText, Folder, FolderPlus, GripVertical, Inbox, Link2, Minus, MoreHorizontal, Paperclip, Pin, Plus, Search, Settings, Sparkles, Trash2, X } from 'lucide-react';
 import './style.css';
@@ -32,7 +33,7 @@ import { rehypeAppLinks } from './app-links.mjs';
 import { TaskLinksContext } from './task-links-context.mjs';
 import './notebook-tools.css';
 
-const readingSchema = { ...defaultSchema, tagNames: [...defaultSchema.tagNames, 'u', 'mark'], protocols: { ...defaultSchema.protocols, href: [...defaultSchema.protocols.href, 'margin', 'file', 'obsidian', 'cxtasks'] } };
+const readingSchema = { ...defaultSchema, tagNames: [...defaultSchema.tagNames, 'u', 'mark'], protocols: { ...defaultSchema.protocols, src: [...defaultSchema.protocols.src, 'margin'], href: [...defaultSchema.protocols.href, 'margin', 'file', 'obsidian', 'cxtasks'] } };
 const api = window.margin;
 installPanelMotion(api);
 const colors = ['paper', 'sage', 'sand', 'rose', 'lavender', 'sky'];
@@ -47,7 +48,7 @@ function Highlighted({ text, query }) { return searchParts(text, query || '').ma
 
 function Markdown({ body, note, act, query = '' }) {
   const cxtasksLinks = React.useContext(TaskLinksContext);
-  return <ReactMarkdown urlTransform={safeAppHref} remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, [rehypeSanitize, readingSchema], [rehypeAppLinks, { cxtasksLinks }], [rehypeSearch, { query }]]} components={{
+  return <ReactMarkdown urlTransform={(value, key) => key === 'src' && imageAttachmentId(value) ? value : safeAppHref(value)} remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, [rehypeSanitize, readingSchema], [rehypeAppLinks, { cxtasksLinks }], [rehypeSearch, { query }]]} components={{
     a: ({ href, children }) => {
       let kind; try { kind = parseAppLink(href).kind; } catch {}
       if (!href || !kind || kind === 'task' && !cxtasksLinks) return <span>{children}</span>;
@@ -55,7 +56,9 @@ function Markdown({ body, note, act, query = '' }) {
         onClick={e => { e.preventDefault(); e.stopPropagation(); act(api.openLink(href)); }}
         onContextMenu={kind === 'document' ? e => { e.preventDefault(); e.stopPropagation(); act(api.linkMenu(href)); } : undefined}>{children}<ArrowRight size={12} /></a>;
     },
-    img: ({ alt }) => <span className="remote-image">{alt || 'Image'} · Attach images locally to preview them</span>,
+    img: ({ src, alt }) => imageAttachmentId(src)
+      ? <button className="note-image-button" title={`Open ${alt || 'image'}`} onClick={e => { e.stopPropagation(); act(api.openAttachment(imageAttachmentId(src))); }}><img className="note-inline-image" src={src} alt={alt || 'Pasted image'} /></button>
+      : <span className="remote-image">{alt || 'Image'} · Attach images locally to preview them</span>,
     li: ({ node, children, className }) => {
       const task = className?.includes('task-list-item');
       const line = (node?.position?.start?.line || 1) - 1;
@@ -99,7 +102,7 @@ function NoteCard({ note, folder, edit, act, trashView, reorder, noteIds, folder
   return <article ref={cardRef} className={`note-card color-${note.color} ${!expanded ? 'folded' : ''} ${reorder.className('note', note.id)}`} data-note-id={note.id}
     draggable={!trashView} tabIndex={trashView ? undefined : 0} aria-label={note.title} aria-keyshortcuts={trashView ? undefined : 'Enter Alt+ArrowUp Alt+ArrowDown'}
     onPointerDownCapture={e => { blockDrag.current = Boolean(e.target.closest('button:not(.card-title), a, input, textarea, select, .note-body, .attachments')); e.currentTarget.draggable = !trashView && !blockDrag.current; }}
-    onDragStart={e => { if (trashView || blockDrag.current) { e.preventDefault(); return; } reorder.start(e, 'note', note.id); }}
+    onDragStart={e => { if (trashView || blockDrag.current) { e.preventDefault(); return; } reorder.start(e, 'note', note.id, note.folderId); }}
     onDragEnd={reorder.end} onDragLeave={e => reorder.leave(e, 'note', note.id)}
     onDragOver={e => { if (!trashView && reorder.over(e, 'note', note.id)) return; if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }} onDrop={drop}
     onDoubleClick={e => {
@@ -112,7 +115,7 @@ function NoteCard({ note, folder, edit, act, trashView, reorder, noteIds, folder
       else reorder.keyboard(e, 'note', note.id, noteIds);
     }}>
     <header className="card-header">
-      <span className={`note-type hue-${({ note: 'teal', checklist: 'green', link: 'blue', code: 'purple' })[note.kind]} ${trashView ? '' : 'note-drag-handle'}`} title={trashView ? undefined : 'Drag to reorder · Option ↑/↓ when the card is focused'}>{!trashView && <GripVertical size={12} className="drag-grip" />}<NodeIcon icon={note.icon} iconColor={note.iconColor} fallback={KindIcon} size={13} />{kindNames[note.kind]}</span>
+      <span className={`note-type hue-${({ note: 'teal', checklist: 'green', link: 'blue', code: 'purple' })[note.kind]} ${trashView ? '' : 'note-drag-handle'}`} title={trashView ? undefined : 'Drag to reorder or move into a folder · Option ↑/↓ when the card is focused'}>{!trashView && <GripVertical size={12} className="drag-grip" />}<NodeIcon icon={note.icon} iconColor={note.iconColor} fallback={KindIcon} size={13} />{kindNames[note.kind]}</span>
       <div className="card-actions">
         {note.pinned && <Pin size={13} className="pinned-icon" fill="currentColor" />}
         <IconButton label={note.collapsed ? 'Expand note' : 'Fold note'} onClick={() => act(api.update(note.id, { collapsed: !note.collapsed }))}>{note.collapsed ? <ChevronDown size={15} /> : <Minus size={15} />}</IconButton>
@@ -137,7 +140,7 @@ function NoteCard({ note, folder, edit, act, trashView, reorder, noteIds, folder
     </header>
     <button className="card-title" title={trashView ? undefined : 'Double-click to edit'} onClick={e => { if (e.detail === 0 && !trashView) edit(note); }}><Highlighted text={note.title} query={query} /></button>
     {expanded && <div ref={resize.body} style={resize.style} className="markdown note-body"><Markdown body={note.body} note={trashView ? null : note} act={act} query={query} />
-    {note.attachments.length > 0 && <div className="attachments">{note.attachments.map(a => <button key={a.id} onClick={() => act(api.openAttachment(a.id))} title={`Open ${a.name}`}>
+    {separateAttachments(note).length > 0 && <div className="attachments">{separateAttachments(note).map(a => <button key={a.id} onClick={() => act(api.openAttachment(a.id))} title={`Open ${a.name}`}>
       {a.mime.startsWith('image/') ? <img src={`margin://attachment/${a.id}`} alt={a.name} /> : <span><Paperclip size={14} />{a.name}</span>}
     </button>)}</div>}</div>}
     {query && <button className="jump-match" onClick={nextMatch}>Jump to next match<ArrowRight size={12} /></button>}
@@ -160,7 +163,7 @@ const Editor = React.forwardRef(function Editor({ initial, focus, folders, close
   });
   const autosave = autosaveRef.current;
   const draft = autosave.draft;
-  const saving = Boolean(autosave.pending || autosave.paused);
+  const saving = Boolean(autosave.pending || autosave.imagePending || autosave.paused);
   const { error, conflict } = autosave;
   const [options, setOptions] = useState(false);
   const [history, setHistory] = useState({ undo: false, redo: false });
@@ -267,8 +270,8 @@ const Editor = React.forwardRef(function Editor({ initial, focus, folders, close
       </div>
     </header>
     <input ref={title} className="card-title editor-title" placeholder="Untitled thought" aria-label="Note title" value={draft.title} maxLength={200} onChange={e => change({ title: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); rich.current?.focus(); } }} />
-    <div ref={resize.body} style={resize.style} className="note-body editor-scroll"><RichText key={richVersion} ref={rich} body={draft.body} visible onChange={body => change({ body })} onHistoryChange={setHistory} copy={text => act(api.copy(text), 'Selection copied')} placeholder="What’s on your mind?" focus={focus?.target === 'body' ? focus : undefined} />
-    {draft.attachments?.length > 0 && <div className="attachments">{draft.attachments.map(a => <button key={a.id} onClick={() => act(api.openAttachment(a.id))} title={`Open ${a.name}`}>
+    <div ref={resize.body} style={resize.style} className="note-body editor-scroll"><RichText key={richVersion} ref={rich} body={draft.body} visible onChange={body => change({ body })} onHistoryChange={setHistory} onPasteImage={(file, insert) => autosave.pasteImage(file, insert)} copy={text => act(api.copy(text), 'Selection copied')} placeholder="What’s on your mind?" focus={focus?.target === 'body' ? focus : undefined} />
+    {separateAttachments(draft).length > 0 && <div className="attachments">{separateAttachments(draft).map(a => <button key={a.id} onClick={() => act(api.openAttachment(a.id))} title={`Open ${a.name}`}>
       {a.mime.startsWith('image/') ? <img src={`margin://attachment/${a.id}`} alt={a.name} /> : <span><Paperclip size={14} />{a.name}</span>}
     </button>)}</div>}</div>
     <footer className="card-footer">
@@ -381,7 +384,10 @@ function App() {
   const [draftExists, setDraftExists] = useState(false);
   const draftKey = !state || state.notebookId === 'main' ? draftPrefix : `${draftPrefix}:${state.notebookId}`;
   const searchRef = useRef(null);
-  const reorder = useReorder((kind, id, targetId, placement) => act(kind === 'note' ? api.reorderNote(id, targetId, placement) : api.reorderTab(id, targetId, placement)));
+  const reorder = useReorder(
+    (kind, id, targetId, placement) => act(kind === 'note' ? api.reorderNote(id, targetId, placement) : api.reorderTab(id, targetId, placement)),
+    (id, folderId) => act(api.update(id, { folderId }), 'Note moved')
+  );
   const showToast = text => { setToast(text); };
   async function act(promise, success) {
     try { const result = await promise; if (!result.ok) { showToast(result.error); return undefined; } if (success && result.value !== null) showToast(success); return result.value ?? true; }
@@ -539,7 +545,8 @@ function App() {
       onContextMenu={e => { e.preventDefault(); chooseSectionIcon(f.id, f.id === 'all' ? 'All notes' : f.name, f.id === 'all' ? FileText : f.id === 'inbox' ? Inbox : Folder); }}
       onClick={() => selectFolder(f.id)}><NodeIcon icon={(f.id === 'all' ? state.sectionAppearances.all : f)?.icon} iconColor={(f.id === 'all' ? state.sectionAppearances.all : f)?.iconColor} fallback={f.id === 'all' ? FileText : f.id === 'inbox' ? Inbox : Folder} className="folder-glyph" size={14} />{f.name}</button>)}<IconButton label="New folder" onClick={() => setFolderDialog({})}><Plus size={15} /></IconButton></nav>
     {subRows.map(({ parent, selected, children }) => <nav key={parent.id} className="subfolders" aria-label={`Folders in ${parent.name}`} data-parent-id={parent.id}>
-      <button className={`subfolder-tab ${selected === parent.id ? 'selected' : ''}`} data-subfolder-all={parent.id} aria-label={`All of ${parent.name}`} onClick={() => { setFilter(parent.id); setFolderMenu(false); }}>All</button>
+      <button className={`subfolder-tab ${selected === parent.id ? 'selected' : ''} ${reorder.className('folder', parent.id)}`} data-subfolder-all={parent.id} aria-label={`All of ${parent.name}`} onClick={() => { setFilter(parent.id); setFolderMenu(false); }}
+        onDragOver={e => reorder.over(e, 'folder', parent.id, 'x')} onDrop={e => reorder.drop(e, 'folder', parent.id, 'x')} onDragLeave={e => reorder.leave(e, 'folder', parent.id)}>All</button>
       {children.map(f => <button key={f.id} data-folder-id={f.id} style={folderTint(f)} className={`subfolder-tab hue-${folderHue(f.color)} ${selected === f.id ? 'selected' : ''} ${reorder.className('tab', f.id)}`} draggable title="Drag to reorder · Option ←/→" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
         onDragStart={e => reorder.start(e, 'tab', f.id)} onDragEnd={reorder.end} onDragOver={e => reorder.over(e, 'tab', f.id, 'x')} onDrop={e => reorder.drop(e, 'tab', f.id, 'x')} onDragLeave={e => reorder.leave(e, 'tab', f.id)} onKeyDown={e => reorder.keyboard(e, 'tab', f.id, children.map(tab => tab.id), 'x')}
         onContextMenu={e => { e.preventDefault(); chooseSectionIcon(f.id, f.name, Folder); }}

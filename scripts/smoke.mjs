@@ -176,6 +176,7 @@ export async function runSmoke(win, store, panel) {
     assert.equal(await saturationValue(), 1);
     assert.equal(await run(`CSS.supports('color','oklch(from rgb(100 120 150 / .5) l calc(c * 2) h)')`), true);
     const originalPreview = await previewColour();
+    const originalBackground = await run(`document.documentElement.style.getPropertyValue('--bg')`);
     await adjustSaturation(2.5);
     await waitFor(`document.querySelector('.saturation-controls output').textContent === '250%'`);
     const vividPreview = await previewColour();
@@ -202,7 +203,7 @@ export async function runSmoke(win, store, panel) {
     assert.equal(await saturationValue(), 2.5, 'Leaving Themes immediately preserves the live adjustment');
     await screenshot('margin-theme-saturation.png');
     await click('Reset theme saturation');
-    await waitFor(`document.querySelector('.saturation-controls output').textContent === '100%' && document.documentElement.style.getPropertyValue('--bg') === '#f6f5f1'`);
+    await waitFor(`document.querySelector('.saturation-controls output').textContent === '100%' && document.documentElement.style.getPropertyValue('--bg') === ${JSON.stringify(originalBackground)}`);
     assert.deepEqual(await previewColour(), originalPreview);
     assert.equal(await run(`document.querySelector('[aria-label="Reset theme saturation"]').disabled`), true);
     await click('Dark appearance');

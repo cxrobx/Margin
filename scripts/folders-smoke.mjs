@@ -21,6 +21,35 @@ export async function runSmoke(win, store, panel) {
     await wait(`document.querySelector('.section-heading h2').textContent === ${JSON.stringify(expectedHeading)} && document.querySelectorAll('.notes-scroll > .note-card').length === ${expectedCards.length}`);
     assert.deepEqual((await cards()).sort(), [...expectedCards].sort(), `Notes shown in ${expectedHeading}`);
   };
+  const dragStart = selector => run(`
+    window.folderDragSource = document.querySelector(${JSON.stringify(selector)});
+    window.folderDragTransfer = new DataTransfer();
+    window.folderDragSource.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: window.folderDragTransfer }));
+  `);
+  const dragTarget = (selector, type, placement = 'before', axis = 'x') => run(`
+    const target = document.querySelector(${JSON.stringify(selector)}), bounds = target.getBoundingClientRect();
+    const event = new DragEvent(${JSON.stringify(type)}, { bubbles: true, cancelable: true, dataTransfer: window.folderDragTransfer,
+      clientX: bounds.left + bounds.width * ${axis === 'x' ? placement === 'before' ? .25 : .75 : .5},
+      clientY: bounds.top + bounds.height * ${axis === 'y' ? placement === 'before' ? .25 : .75 : .5} });
+    target.dispatchEvent(event); event.defaultPrevented;
+  `);
+  const dragEnd = () => run(`window.folderDragSource.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: window.folderDragTransfer })); delete window.folderDragSource; delete window.folderDragTransfer;`);
+  const moveNote = async (id, folderId, selector = `[data-folder-id="${folderId}"]`) => {
+    await wait(`Boolean(document.querySelector('[data-note-id="${id}"]'))`);
+    const before = await store.read();
+    await dragStart(`[data-note-id="${id}"]`);
+    assert.equal(await dragTarget(selector, 'dragover'), true, 'Folders accept a dragged note');
+    await wait(`document.querySelector(${JSON.stringify(selector)}).classList.contains('drop-folder')`);
+    assert.equal(await run(`Boolean(document.querySelector('.drop-before, .drop-after'))`), false, 'A note move highlights the folder instead of a tab insertion point');
+    assert.equal(await dragTarget(selector, 'drop'), true);
+    await dragEnd();
+    for (let i = 0; i < 80 && (await store.get(id)).folderId !== folderId; i++) await new Promise(resolve => setTimeout(resolve, 100));
+    assert.equal((await store.get(id)).folderId, folderId, 'The renderer persists the destination through IPC');
+    const after = await store.read();
+    assert.deepEqual(after.tabOrder, before.tabOrder, 'Moving a note must preserve tab order');
+    assert.deepEqual(after.noteOrder, before.noteOrder, 'Moving a note must preserve note order');
+    await wait(`!document.querySelector('.drop-folder, .is-dragging')`);
+  };
 
   const clientA = await store.createFolder('Client A', 'sky', 'work');
   const drafts = await store.createFolder('Drafts', 'sand', clientA.id);
@@ -29,6 +58,58 @@ export async function runSmoke(win, store, panel) {
   panel.show(); await wait(`document.querySelectorAll('.note-card').length === 5`);
   assert.deepEqual(await run(`Array.from(document.querySelectorAll('.folders > .folder-tab')).map(el => el.textContent)`), ['All', 'Inbox', 'Work', 'Personal'], 'Only top-level folders sit in the top row');
   assert.deepEqual(await rows(), []);
+
+  // Note drops use the exact folder under the pointer, including Inbox and both nested levels.
+  const workPlan = (await store.read()).notes.find(note => note.title === 'Work plan');
+  await moveNote(workPlan.id, 'personal');
+  await moveNote(workPlan.id, 'inbox');
+  await moveNote(workPlan.id, 'work');
+  const noMoveRevision = (await store.read()).revision;
+  await dragStart(`[data-note-id="${workPlan.id}"]`);
+  for (const id of ['all', 'work']) {
+    assert.equal(await dragTarget(`[data-folder-id="${id}"]`, 'dragover'), false, 'All notes and the current folder reject a note move');
+    await dragTarget(`[data-folder-id="${id}"]`, 'drop');
+  }
+  await dragEnd();
+  assert.equal((await store.read()).revision, noMoveRevision, 'Rejected drops do not save');
+  await dragStart(`[data-note-id="${workPlan.id}"]`);
+  await dragTarget('[data-folder-id="personal"]', 'dragover');
+  await wait(`document.querySelector('[data-folder-id="personal"]').classList.contains('drop-folder')`);
+  await dragTarget('[data-folder-id="personal"]', 'dragleave');
+  await wait(`!document.querySelector('.drop-folder')`);
+  await dragEnd();
+  assert.equal((await store.read()).revision, noMoveRevision, 'Leaving and canceling a folder drag does not save');
+  await top('Work'); await view('Work', ['Work plan', 'Client A brief', 'Draft proposal', 'Client B call']);
+  await moveNote(workPlan.id, clientA.id);
+  await sub('Client A'); await view('Client A', ['Work plan', 'Client A brief', 'Draft proposal']);
+  await moveNote(workPlan.id, drafts.id);
+  await moveNote(workPlan.id, clientA.id, `[data-subfolder-all="${clientA.id}"]`);
+  await moveNote(workPlan.id, 'work');
+  await subAll('work'); await top('All');
+  await view('All notes', ['Work plan', 'Client A brief', 'Draft proposal', 'Client B call', 'Groceries']);
+
+  // The same tabs still reorder horizontally, and notes still reorder vertically.
+  const reorderItem = async (source, target, placement, axis = 'x') => {
+    await dragStart(source);
+    assert.equal(await dragTarget(target, 'dragover', placement, axis), true);
+    await wait(`document.querySelector(${JSON.stringify(target)}).classList.contains('drop-${placement}')`);
+    assert.equal(await run(`Boolean(document.querySelector('.drop-folder'))`), false, 'Reordering never shows a folder move highlight');
+    await dragTarget(target, 'drop', placement, axis); await dragEnd();
+  };
+  await reorderItem('[data-folder-id="work"]', '[data-folder-id="inbox"]', 'before');
+  await wait(`document.querySelectorAll('.folders > .folder-tab')[1].dataset.folderId === 'work'`);
+  await reorderItem('[data-folder-id="work"]', '[data-folder-id="inbox"]', 'after');
+  await wait(`document.querySelectorAll('.folders > .folder-tab')[2].dataset.folderId === 'work'`);
+  await top('Work');
+  await reorderItem(`[data-folder-id="${clientB.id}"]`, `[data-folder-id="${clientA.id}"]`, 'before');
+  await wait(`document.querySelector('.subfolders [data-folder-id]').dataset.folderId === '${clientB.id}'`);
+  await reorderItem(`[data-folder-id="${clientB.id}"]`, `[data-folder-id="${clientA.id}"]`, 'after');
+  await wait(`document.querySelector('.subfolders [data-folder-id]').dataset.folderId === '${clientA.id}'`);
+  await top('All');
+  const firstNote = await run(`Array.from(document.querySelectorAll('.note-card')).find(el => el.dataset.noteId !== '${workPlan.id}').dataset.noteId`);
+  await reorderItem(`[data-note-id="${workPlan.id}"]`, `[data-note-id="${firstNote}"]`, 'before', 'y');
+  await wait(`document.querySelector('.note-card').dataset.noteId === '${workPlan.id}'`);
+  assert.equal((await store.get(workPlan.id)).folderId, 'work', 'Reordering keeps the note in its folder');
 
   // A parent shows its own notes and every descendant's, with a row per level.
   await top('Work'); await view('Work', ['Work plan', 'Client A brief', 'Draft proposal', 'Client B call']);
@@ -100,6 +181,11 @@ export async function runSmoke(win, store, panel) {
   assert.deepEqual(await items(), [order[0], '§This week', ...order.slice(1), '§'], 'A click below the last note adds an unlabelled line at the end');
   let state = await store.read();
   assert.deepEqual(state.dividers.map(d => [d.view, d.label]), [['work', 'This week'], ['work', '']]);
+  const dividerRevision = state.revision;
+  await dragStart('.note-divider');
+  assert.equal(await dragTarget('[data-folder-id="personal"]', 'dragover'), false, 'Sections only reorder and cannot move into a folder');
+  await dragTarget('[data-folder-id="personal"]', 'drop'); await dragEnd();
+  assert.equal((await store.read()).revision, dividerRevision, 'Dropping a section on a folder does not save');
   await screenshot('margin-sections.png');
   await run(`const d = document.querySelector('.note-divider'); d.focus(); d.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', altKey: true, bubbles: true }))`);
   await wait(`document.querySelector('.notes-scroll').firstElementChild?.classList.contains('note-divider')`);
@@ -127,6 +213,6 @@ export async function runSmoke(win, store, panel) {
   state = await store.read();
   assert.equal(state.notes.find(n => n.title === 'Client A brief').folderId, 'work');
   assert.equal(state.folders.find(f => f.id === drafts.id).parentId, 'work');
-  assert.deepEqual(await rows(), [['*All', 'Drafts', 'Client B']]);
-  console.log('Folders smoke passed: three-level nesting with descendant notes, one sub-tab row per level, remembered sub-tabs (All or a child) across reloads, New folder inside, moving a folder, path labels in the editor, right-click sections placed at the pointer, naming, Escape, Option ↑, per-view sections hidden in search, removing a section, and removing a subfolder into its parent.');
+  assert.deepEqual(await rows(), [['*All', 'Client B', 'Drafts']], 'The lifted folder follows the manually ordered siblings');
+  console.log('Folders smoke passed: note drag-and-drop into top-level folders, Inbox, both nested levels and the parent All tab; rejected and canceled drops; preserved note/tab order; note and top-level/subfolder tab reordering; sections cannot move into folders; three-level nesting with descendant notes, one sub-tab row per level, remembered sub-tabs (All or a child) across reloads, New folder inside, moving a folder, path labels in the editor, right-click sections placed at the pointer, naming, Escape, Option ↑, per-view sections hidden in search, removing a section, and removing a subfolder into its parent.');
 }

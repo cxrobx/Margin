@@ -1,3 +1,5 @@
+import { MAX_ATTACHMENT_BYTES } from '../shared/attachments.mjs';
+
 const editableFields = ['title', 'body', 'color', 'folderId', 'kind', 'pinned', 'icon', 'iconColor', 'bodyHeight'];
 
 // Keep one write in flight and adopt its revision before saving newer typing.
@@ -13,6 +15,7 @@ export class NoteAutosave {
     this.clear = clear;
     this.delay = delay;
     this.pending = null;
+    this.imagePending = null;
     this.timer = null;
     this.paused = false;
     this.error = '';
@@ -22,7 +25,7 @@ export class NoteAutosave {
   get canSave() { return Boolean(this.draft.id || this.draft.title.trim() || this.draft.body.trim()); }
   get status() {
     if (this.error) return 'Couldn’t save';
-    if (this.pending || this.paused || (this.dirty && this.canSave)) return 'Saving…';
+    if (this.pending || this.imagePending || this.paused || (this.dirty && this.canSave)) return 'Saving…';
     return this.draft.id ? 'Saved' : '';
   }
   notify() { this.changed?.(); }
@@ -46,6 +49,10 @@ export class NoteAutosave {
     return false;
   }
   save() {
+    if (this.imagePending) return this.imagePending.then(ok => ok ? this.save() : false);
+    return this.saveWriting();
+  }
+  saveWriting() {
     clearTimeout(this.timer);
     if (this.pending) return this.pending;
     if (this.conflict || this.paused) return Promise.resolve(false);
@@ -106,6 +113,38 @@ export class NoteAutosave {
       }
     } catch (error) { this.fail({ error: error.message }); }
     finally { this.paused = false; this.notify(); this.schedule(); }
+  }
+  pasteImage(file, insert) {
+    const previous = this.imagePending;
+    clearTimeout(this.timer);
+    // Serialize repeated pastes, and keep close/quit waiting until both the
+    // local file and its Markdown reference have been saved.
+    const operation = Promise.resolve().then(async () => {
+      if (previous && !await previous) return false;
+      if (this.conflict || this.paused) return false;
+      try {
+        if (!file.size || file.size > MAX_ATTACHMENT_BYTES) throw new Error('Images are limited to 25 MB.');
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        if (!this.canSave) this.update({ title: 'Untitled note' });
+        if (!await this.saveWriting() || !this.draft.id) return false;
+        this.paused = true; this.notify();
+        const result = await this.api.pasteImage(this.draft.id, { bytes, name: file.name }, this.draft.revision);
+        if (!result.ok) return this.fail(result);
+        const { note, attachment } = result.value;
+        this.draft = { ...this.draft, attachments: note.attachments, revision: note.revision, updatedAt: note.updatedAt };
+        this.saved = { ...this.saved, attachments: note.attachments, revision: note.revision };
+        this.remember(); this.notify();
+        insert(attachment);
+        this.paused = false;
+        return await this.saveWriting();
+      } catch (error) { return this.fail({ error: error.message }); }
+      finally { this.paused = false; }
+    }).finally(() => {
+      if (this.imagePending === operation) this.imagePending = null;
+      this.notify(); this.schedule();
+    });
+    this.imagePending = operation; this.notify();
+    return operation;
   }
   dispose() {
     this.changed = null;

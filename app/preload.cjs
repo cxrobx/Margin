@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('margin', {
   deleteTheme: id => ipcRenderer.invoke('themes:delete', id),
   connections: () => ipcRenderer.invoke('app:connections'),
   attach: id => ipcRenderer.invoke('notes:attach', id),
+  pasteImage: (id, image, revision) => ipcRenderer.invoke('notes:paste-image', id, image, revision),
   dropFiles: (id, files) => ipcRenderer.invoke('notes:drop', id, files.map(file => webUtils.getPathForFile(file))),
   openAttachment: id => ipcRenderer.invoke('app:attachment', id),
   openLink: (url, preferred) => ipcRenderer.invoke('app:link', url, preferred),

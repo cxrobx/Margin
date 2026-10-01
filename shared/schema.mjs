@@ -38,7 +38,7 @@ export const dividerLabel = z.string().trim().max(80);
 export const dividerSchema = z.object({ id: z.string().uuid(), view: z.string().min(1), label: dividerLabel }).strict();
 export const attachmentSchema = z.object({
   id: z.string().uuid(), name: z.string(), filename: z.string(),
-  mime: z.string(), size: z.number().nonnegative()
+  mime: z.string(), size: z.number().nonnegative(), inline: z.boolean().optional()
 });
 export const noteSchema = createNoteSchema.extend({
   id: z.string().uuid(), collapsed: z.boolean(), revision: z.number().int().positive(),

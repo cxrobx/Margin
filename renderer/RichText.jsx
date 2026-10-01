@@ -44,14 +44,15 @@ function Tool({ label, action, active = false, children, onClick, type = 'button
     {show && createPortal(<span ref={tooltip} id={id} role="tooltip" className="format-tooltip" style={{ ...position, visibility: position ? 'visible' : 'hidden' }}>{label}{hint.label && <kbd>{hint.label}</kbd>}</span>, document.body)}
   </>;
 }
-const RichText = forwardRef(function RichText({ body, visible, onChange, onHistoryChange, copy, placeholder, focus }, ref) {
+const RichText = forwardRef(function RichText({ body, visible, onChange, onHistoryChange, onPasteImage, copy, placeholder, focus }, ref) {
   const cxtasksLinks = React.useContext(TaskLinksContext);
   const initialBody = useRef(body);
   const initialFocus = useRef(focus);
   const focused = useRef(false);
   const container = useRef(null);
   const editLink = useRef(null);
-  const extensions = useMemo(() => richExtensions(placeholder, () => { editLink.current?.(); return true; }), [placeholder]);
+  const pasteImage = useRef(onPasteImage); pasteImage.current = onPasteImage;
+  const extensions = useMemo(() => richExtensions(placeholder, () => { editLink.current?.(); return true; }, (file, insert) => pasteImage.current?.(file, insert)), [placeholder]);
   const editorProps = useMemo(() => ({ attributes: { class: 'rich-body markdown', role: 'textbox', 'aria-label': 'Note body', 'aria-multiline': 'true', spellcheck: 'true' } }), []);
   const [scrollTarget, setScrollTarget] = useState(null);
   const options = useMemo(() => ({ strategy: 'fixed', placement: 'top', offset: 8, flip: { padding: 12 }, shift: { padding: 12 }, scrollTarget: scrollTarget || window }), [scrollTarget]);

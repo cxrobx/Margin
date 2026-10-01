@@ -1,6 +1,6 @@
 {
   "name": "margin-notes",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "A quiet screen-edge notebook with a local MCP server.",
   "type": "module",
@@ -64,6 +64,7 @@
       "assets/**",
       "scripts/smoke.mjs",
       "scripts/rich-smoke.mjs",
+      "scripts/images-smoke.mjs",
       "scripts/icons-smoke.mjs",
       "package.json",
       "scripts/capture.mjs",

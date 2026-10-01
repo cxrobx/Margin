@@ -8,6 +8,7 @@ import { vaultPaletteSchema, savedThemeSchema } from './themes.mjs';
 import { moveItem, orderNotes, orderTabs, withDividers } from './order.mjs';
 import { canPlace, childrenOf, descendantIds, siblingsOf, uniqueName, validateFolderTree } from './folders.mjs';
 import { recordNoteHistory } from './notebook-features.mjs';
+import { MAX_ATTACHMENT_BYTES } from './attachments.mjs';
 
 export function defaultDataDir() {
   return process.env.MARGIN_DATA_DIR || (process.platform === 'darwin'
@@ -359,5 +360,24 @@ export class NoteStore {
     const attachment = state.notes.flatMap(n => n.attachments).find(a => a.id === id);
     if (!attachment || path.basename(attachment.filename) !== attachment.filename) throw new Error('Attachment not found.');
     return { path: path.join(this.dir, 'attachments', attachment.filename), mime: attachment.mime };
+  }
+  async attachImage(id, bytes, name, expectedRevision) {
+    if (!(bytes instanceof Uint8Array) || !bytes.length || bytes.length > MAX_ATTACHMENT_BYTES) throw new Error('Images are limited to 25 MB.');
+    const data = Buffer.from(bytes);
+    if (!data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) throw new Error('Couldn’t read the pasted image.');
+    const attachmentId = randomUUID();
+    const label = typeof name === 'string' ? path.parse(path.basename(name.replace(/[\u0000-\u001f]/g, ''))).name.slice(0, 180).trim() : '';
+    const attachment = { id: attachmentId, name: `${label || 'Pasted image'}.png`, filename: `${attachmentId}.png`, size: data.length, mime: 'image/png', inline: true };
+    const target = path.join(this.dir, 'attachments', attachment.filename);
+    await fs.writeFile(target, data, { flag: 'wx', mode: 0o600 });
+    try {
+      const note = await this.mutate(state => {
+        const note = this.find(state, id);
+        if (note.revision !== expectedRevision) throw new ConflictError();
+        note.attachments.push(attachment); this.touch(note); this.event(state, 'pasted an image into', note, 'You');
+        return note;
+      });
+      return { note, attachment };
+    } catch (error) { await fs.unlink(target).catch(() => {}); throw error; }
   }
 }
