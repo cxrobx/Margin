@@ -36,6 +36,7 @@ const retiredSettings = value => {
 export const noteLabel = note => note.title?.trim() || (note.body || '').trim().split('\n')[0].replace(/^(?:[-#*>\s]|\[[ x]\])+/i, '').trim().slice(0, 80) || 'Untitled note';
 export const settingsSchema = z.preprocess(retiredSettings, z.object({
   cxtasksLinks: z.boolean().default(false),
+  autoUpdateCheck: z.boolean().default(true),
   alwaysOnTop: z.boolean(), hotEdge: z.boolean(), showEdgeTab: z.boolean().default(true), edge: z.enum(['left', 'right']),
   theme: z.enum(['light', 'dark', 'system']),
   themeId: z.union([z.enum(['default', 'vault', 'cxtasks-glass', 'monokai-soda']), z.string().uuid()]).default('default'),

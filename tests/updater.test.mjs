@@ -108,6 +108,27 @@ test('a packaged app checks shortly after launch and then every 24 hours, once',
   assert.equal(f.timers.cleared.length, 2);
 });
 
+test('turning automatic checks off stops the schedule; the menu check still works', async () => {
+  const f = fixture({ latest: '0.1.1' });
+  assert.equal(f.controller.setAutomatic(true), true);
+  assert.equal(f.controller.setAutomatic(true), false, 'already on: no second schedule');
+  assert.equal(f.timers.set.length, 1); assert.equal(f.timers.interval.length, 1);
+  assert.equal(f.controller.setAutomatic(false), false);
+  assert.equal(f.timers.cleared.length, 2, 'both timers are cleared');
+  assert.equal(f.loads(), 0, 'off before the first check means no request at all');
+  await f.controller.checkNow();
+  assert.ok(f.names().includes('check'), 'Check for Updates… still checks while automatic checks are off');
+  assert.equal(f.controller.setAutomatic(true), true, 'turning it back on schedules again');
+  assert.equal(f.timers.set.length, 2);
+  f.controller.stop();
+});
+
+test('automatic checks do nothing in an unpackaged app', () => {
+  const f = fixture({ packaged: false });
+  assert.equal(f.controller.setAutomatic(true), false);
+  assert.equal(f.timers.set.length, 0);
+});
+
 test('updater settings: nothing downloads or installs on its own, no downgrades, no prereleases', async () => {
   const f = fixture({ latest: '0.1.1' });
   await f.controller.check();

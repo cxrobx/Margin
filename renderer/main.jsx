@@ -326,6 +326,7 @@ function Preferences({ state, hasCXTasks, close, act, showActivity, showThemes, 
     <div className="overlay-top"><IconButton label="Back to notes" onClick={close}><ArrowLeft size={19} /></IconButton><span>Make it yours</span><span /></div>
     <div className="preferences-content"><h1>A little more<br />your style.</h1><div className="pref-group"><h3>Your workspace</h3>
       <LaunchAtStartup api={api} />
+      <label className="pref-row"><div><strong>Check for updates automatically</strong><small>Once a day, from GitHub Releases</small></div><input aria-label="Check for updates automatically" type="checkbox" checked={state.settings.autoUpdateCheck} onChange={e => setting({ autoUpdateCheck: e.target.checked })} /></label>
       <label className="pref-row"><div><strong>Stay within reach</strong><small>Keep Margin above other windows</small></div><input type="checkbox" checked={state.settings.alwaysOnTop} onChange={e => setting({ alwaysOnTop: e.target.checked })} /></label>
       <label className="pref-row"><div><strong>Show screen-edge tab</strong><small>Turn off to use the shortcut or menu bar</small></div><input aria-label="Show screen-edge tab" type="checkbox" checked={state.settings.showEdgeTab} onChange={e => setting({ showEdgeTab: e.target.checked })} /></label>
       <label className="pref-row"><div><strong>Open from the edge</strong><small>Pause your pointer at the screen edge</small></div><input type="checkbox" checked={state.settings.hotEdge} onChange={e => setting({ hotEdge: e.target.checked })} /></label>

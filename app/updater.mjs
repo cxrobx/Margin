@@ -188,6 +188,12 @@ export function createUpdater({
     timers.clearTimeout(firstTimer); timers.clearInterval(repeatTimer);
     firstTimer = repeatTimer = null; started = false;
   }
+  // Preferences → Check for updates automatically. Off stops the schedule, so no
+  // background request is made; Check for Updates… still works on demand.
+  function setAutomatic(on) {
+    if (on) return start();
+    stop(); return false;
+  }
 
-  return { enabled, start, stop, checkNow: () => check({ manual: true }), check };
+  return { enabled, start, stop, setAutomatic, checkNow: () => check({ manual: true }), check };
 }

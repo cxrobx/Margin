@@ -101,3 +101,17 @@ test('task links default off, migrate without rewriting notes, and persist only 
   assert.equal((await new NoteStore(dir).read()).settings.cxtasksLinks, false);
   await assert.rejects(reopened.setSettings({ cxtasksLinks: 'yes' }));
 });
+
+test('automatic update checks default on, migrate, and persist when turned off', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-update-pref-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const store = await new NoteStore(dir).init();
+  assert.equal((await store.read()).settings.autoUpdateCheck, true);
+  const legacy = await store.read(); delete legacy.settings.autoUpdateCheck;
+  await fs.writeFile(store.file, JSON.stringify(legacy));
+  const reopened = await new NoteStore(dir).init();
+  assert.equal((await reopened.read()).settings.autoUpdateCheck, true, 'existing notebooks keep checking');
+  await reopened.setSettings({ autoUpdateCheck: false });
+  assert.equal((await new NoteStore(dir).read()).settings.autoUpdateCheck, false);
+  await assert.rejects(reopened.setSettings({ autoUpdateCheck: 'no' }));
+});

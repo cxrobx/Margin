@@ -126,7 +126,7 @@ async function publish() {
     const state = await store.read();
     if (state.revision !== revision) {
       const oldEdge = settings.edge, oldEdgeTab = settings.showEdgeTab;
-      revision = state.revision; settings = state.settings; vaultPalette = state.vaultTheme.palette; applySettings();
+      revision = state.revision; settings = state.settings; vaultPalette = state.vaultTheme.palette; applySettings(); updater.setAutomatic(settings.autoUpdateCheck);
       if (settings.edge !== oldEdge) position();
       if (settings.edge !== oldEdge || settings.showEdgeTab !== oldEdgeTab) syncEdgeBars();
       win.webContents.send('notes:changed', state);
@@ -300,7 +300,7 @@ if (store && settings) {
     const oldEdge = settings.edge, oldEdgeTab = settings.showEdgeTab, oldAddress = settings.vaultAddress;
     settings = await store.setSettings(patch);
     if (oldAddress !== settings.vaultAddress) { vaultPalette = null; vaultStatus = { connected: false, checkedAt: null }; win.webContents.send('vault:status', vaultStatus); }
-    applySettings(); if (settings.edge !== oldEdge) position();
+    applySettings(); updater.setAutomatic(settings.autoUpdateCheck); if (settings.edge !== oldEdge) position();
     if (settings.edge !== oldEdge || settings.showEdgeTab !== oldEdgeTab) syncEdgeBars();
     if (settings.themeId === 'vault') refreshVaultTheme().catch(console.error);
     return settings;
@@ -422,7 +422,7 @@ if (store && settings) {
   if (process.env.MARGIN_SMOKE_TEST) console.log('Smoke: loading renderer');
   if (devUrl) await win.loadURL(devUrl); else await win.loadFile(path.join(root, 'dist/index.html'));
   if (settings.themeId === 'vault') refreshVaultTheme().catch(console.error);
-  updater.start();
+  updater.setAutomatic(settings.autoUpdateCheck);
   if (process.env.MARGIN_SMOKE_TEST) console.log('Smoke: renderer loaded');
   if (process.env.MARGIN_SMOKE_TEST) {
     const { runSmoke } = await import(process.env.MARGIN_STARTUP_SMOKE_TEST ? '../scripts/startup-smoke.mjs' : process.env.MARGIN_IMAGE_SMOKE_TEST ? '../scripts/images-smoke.mjs' : process.env.MARGIN_LINK_SMOKE_TEST ? '../scripts/links-smoke.mjs' : process.env.MARGIN_FEATURE_SMOKE_TEST ? '../scripts/features-smoke.mjs' : process.env.MARGIN_FOLDERS_SMOKE_TEST ? '../scripts/folders-smoke.mjs' : '../scripts/smoke.mjs');

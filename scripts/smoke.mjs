@@ -377,6 +377,13 @@ export async function runSmoke(win, store, panel) {
     await click('Preferences'); await click('Show screen-edge tab');
     await waitFor(`!document.querySelector('[aria-label="Show screen-edge tab"]').checked`);
     assert.equal((await store.read()).settings.showEdgeTab, false);
+    assert.equal(await run(`document.querySelector('[aria-label="Check for updates automatically"]').checked`), true, 'Automatic update checks default on');
+    await click('Check for updates automatically');
+    await waitFor(`!document.querySelector('[aria-label="Check for updates automatically"]').checked`);
+    assert.equal((await store.read()).settings.autoUpdateCheck, false);
+    await click('Check for updates automatically');
+    await waitFor(`document.querySelector('[aria-label="Check for updates automatically"]').checked`);
+    assert.equal((await store.read()).settings.autoUpdateCheck, true);
     await screenshot('margin-edge-tab-setting.png');
     await click('Back to notes');
     panel.hide(); await waitNative(() => panel.motion.phase === 'closed');
