@@ -1,6 +1,6 @@
 {
   "name": "margin-notes",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "description": "A quiet screen-edge notebook with a local MCP server.",
   "type": "module",
