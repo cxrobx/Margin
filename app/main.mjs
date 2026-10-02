@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { iconCandidates } from './icon-images.mjs';
+import { appIcon, iconCandidates } from './icon-images.mjs';
 import { NoteStore, defaultDataDir } from '../shared/store.mjs';
 import { noteHistory, restoreNoteVersion, duplicateNote, prepareBackup, applyBackup, listBackups, exportBackup, importMarkdown, exportMarkdown, collectMarkdown, safeName } from '../shared/notebook-features.mjs';
 import { noteLink, noteIdFromLink } from '../shared/note-links.mjs';
@@ -18,6 +18,7 @@ import { MONOKAI_SODA_THEME } from '../shared/themes.mjs';
 import { noteLabel } from '../shared/schema.mjs';
 import { parseAppLink } from '../shared/app-links.mjs';
 import { createLinkOpener, installedLinkApps } from './document-links.mjs';
+import { createLinkPreviews } from './link-previews.mjs';
 import { createLaunchAtStartup } from './launch-at-startup.mjs';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -38,6 +39,7 @@ const backupPlans = new Map();
 const linkLaunches = [];
 const launchAtStartup = createLaunchAtStartup({ app });
 const linkOpener = createLinkOpener({ openExternal: value => shell.openExternal(value), ...(process.env.MARGIN_LINK_SMOKE_TEST ? { launch: async (application, value) => { linkLaunches.push({ application, value }); } } : {}) });
+const linkPreviews = createLinkPreviews({ fileIcon: application => appIcon(application) });
 let pendingNoteLink = process.argv.find(value => value.startsWith('margin://note/'));
 async function openNoteLink(value) {
   try {
@@ -149,10 +151,10 @@ async function refreshVaultTheme() {
   vaultRequests.set(address, request);
   try { return await request; } finally { vaultRequests.delete(address); }
 }
-function register(channel, fn) {
+function register(channel, fn, { refresh = true } = {}) {
   ipcMain.handle(channel, async (event, ...args) => {
     if (event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error('Untrusted caller');
-    try { const result = await fn(...args); await publish(); return { ok: true, value: result }; }
+    try { const result = await fn(...args); if (refresh) await publish(); return { ok: true, value: result }; }
     catch (e) { return { ok: false, error: e.message, conflict: e.name === 'ConflictError' }; }
   });
 }
@@ -342,6 +344,8 @@ if (store && settings) {
     const installed = await installedLinkApps({ refresh: true });
     return { cxtasks: Boolean(installed.cxtasks) };
   });
+  // Reading-only lookups; they change nothing, so skip re-reading the notebook.
+  register('app:link-preview', value => linkPreviews.preview(value, { tasks: settings.cxtasksLinks }), { refresh: false });
   register('app:link-menu', async value => {
     const info = await linkOpener.describe(value);
     if (info.kind !== 'document') return info;

@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('margin', {
   openAttachment: id => ipcRenderer.invoke('app:attachment', id),
   openLink: (url, preferred) => ipcRenderer.invoke('app:link', url, preferred),
   linkMenu: url => ipcRenderer.invoke('app:link-menu', url),
+  linkPreview: url => ipcRenderer.invoke('app:link-preview', url),
   linkApps: () => ipcRenderer.invoke('app:link-apps'),
   showData: () => ipcRenderer.invoke('app:data'),
   export: () => ipcRenderer.invoke('app:export'),

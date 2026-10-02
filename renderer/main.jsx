@@ -7,6 +7,7 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import IconPicker from './IconPicker.jsx';
 import NodeIcon from './NodeIcon.jsx';
 import RichText from './RichText.jsx';
+import LinkChip from './LinkChip.jsx';
 import NoteCaret from './NoteCaret.jsx';
 import LaunchAtStartup from './LaunchAtStartup.jsx';
 import { useNoteResize, NoteResizeHandle } from './note-resize.jsx';
@@ -34,6 +35,7 @@ import { parseAppLink, safeAppHref } from '../shared/app-links.mjs';
 import { rehypeAppLinks } from './app-links.mjs';
 import { TaskLinksContext } from './task-links-context.mjs';
 import './notebook-tools.css';
+import './link-chip.css';
 
 const readingSchema = { ...defaultSchema, tagNames: [...defaultSchema.tagNames, 'u', 'mark'], protocols: { ...defaultSchema.protocols, src: [...defaultSchema.protocols.src, 'margin'], href: [...defaultSchema.protocols.href, 'margin', 'file', 'obsidian', 'cxtasks'] } };
 const api = window.margin;
@@ -48,15 +50,20 @@ function IconButton({ label, children, ...props }) { return <button className="i
 
 function Highlighted({ text, query }) { return searchParts(text, query || '').map((part, index) => part.match ? <mark className="search-match" key={index}>{part.text}</mark> : part.text); }
 
+const textOf = node => node.type === 'text' ? node.value : (node.children || []).map(textOf).join('');
+// A pasted path or T-number links to itself; anything else is a label the author chose.
+function isBareReference(node, link) { try { return parseAppLink(textOf(node)).href === link.href; } catch { return false; } }
 function Markdown({ body, note, act, query = '' }) {
   const cxtasksLinks = React.useContext(TaskLinksContext);
   return <ReactMarkdown urlTransform={(value, key) => key === 'src' && imageAttachmentId(value) ? value : safeAppHref(value)} remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, [rehypeSanitize, readingSchema], [rehypeAppLinks, { cxtasksLinks }], [rehypeSearch, { query }]]} components={{
-    a: ({ href, children }) => {
-      let kind; try { kind = parseAppLink(href).kind; } catch {}
+    a: ({ node, href, children }) => {
+      let link; try { link = parseAppLink(href); } catch {}
+      const kind = link?.kind;
       if (!href || !kind || kind === 'task' && !cxtasksLinks) return <span>{children}</span>;
-      return <a href={href} data-link-kind={kind} title={kind === 'document' ? 'Open document · Right-click to choose Onyx or Obsidian' : kind === 'task' ? 'Open in CXTasks' : kind === 'obsidian' ? 'Open in Obsidian' : undefined}
-        onClick={e => { e.preventDefault(); e.stopPropagation(); act(api.openLink(href)); }}
-        onContextMenu={kind === 'document' ? e => { e.preventDefault(); e.stopPropagation(); act(api.linkMenu(href)); } : undefined}>{children}<ArrowRight size={12} /></a>;
+      const onClick = e => { e.preventDefault(); e.stopPropagation(); act(api.openLink(href)); };
+      const onContextMenu = kind === 'document' ? e => { e.preventDefault(); e.stopPropagation(); act(api.linkMenu(href)); } : undefined;
+      if (kind === 'document' || kind === 'task') return <LinkChip link={link} label={children} bare={isBareReference(node, link)} query={query} onClick={onClick} onContextMenu={onContextMenu} />;
+      return <a href={href} data-link-kind={kind} title={kind === 'obsidian' ? 'Open in Obsidian' : undefined} onClick={onClick} onContextMenu={onContextMenu}>{children}<ArrowRight size={12} /></a>;
     },
     img: ({ src, alt }) => imageAttachmentId(src)
       ? <button className="note-image-button" title={`Open ${alt || 'image'}`} onClick={e => { e.stopPropagation(); act(api.openAttachment(imageAttachmentId(src))); }}><img className="note-inline-image" src={src} alt={alt || 'Pasted image'} /></button>

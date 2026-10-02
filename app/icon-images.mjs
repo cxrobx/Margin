@@ -3,6 +3,25 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { IMAGE_ICON_PREFIX, validImageIcon } from '../shared/icons.mjs';
 
+// Crop a BGRA bitmap to its visible pixels, centred on a square `size` wide.
+export function trimmedSquare(pixels, width, height, size) {
+  let left = width, top = height, right = -1, bottom = -1;
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    if (pixels[(y * width + x) * 4 + 3] > 16) { left = Math.min(left, x); top = Math.min(top, y); right = Math.max(right, x); bottom = Math.max(bottom, y); }
+  }
+  if (right < left) return null;
+  const w = right - left + 1, h = bottom - top + 1, side = Math.max(w, h);
+  const square = Buffer.alloc(side * side * 4);
+  const x = Math.floor((side - w) / 2), y = Math.floor((side - h) / 2);
+  for (let row = 0; row < h; row++) pixels.copy(square, ((row + y) * side + x) * 4, ((row + top) * width + left) * 4, ((row + top) * width + left + w) * 4);
+  return nativeImage.createFromBitmap(square, { width: side, height: side }).resize({ width: size, height: size, quality: 'best' });
+}
+// An installed app's own icon, as QuickLook draws it (app.getFileIcon returns the
+// generic bundle icon on macOS), trimmed so every app fills the same box.
+export async function appIcon(application, size = 32) {
+  const image = (await nativeImage.createThumbnailFromPath(application, { width: 128, height: 128 })).resize({ width: 128, height: 128, quality: 'best' });
+  return trimmedSquare(image.toBitmap({ scaleFactor: 1 }), 128, 128, size) || image.resize({ width: size, height: size, quality: 'best' });
+}
 // Freeze imported images into small PNGs; never depend on the original path.
 export async function iconCandidates(file) {
   const stat = await fs.stat(file);
@@ -15,17 +34,9 @@ export async function iconCandidates(file) {
   const { width, height } = image.getSize();
   const bitmap = image.toBitmap({ scaleFactor: 1 });
   const finish = pixels => {
-    let left = width, top = height, right = -1, bottom = -1;
-    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
-      if (pixels[(y * width + x) * 4 + 3] > 16) { left = Math.min(left, x); top = Math.min(top, y); right = Math.max(right, x); bottom = Math.max(bottom, y); }
-    }
-    if (right < left) return null;
-    const w = right - left + 1, h = bottom - top + 1, side = Math.max(w, h);
-    const square = Buffer.alloc(side * side * 4);
-    const x = Math.floor((side - w) / 2), y = Math.floor((side - h) / 2);
-    for (let row = 0; row < h; row++) pixels.copy(square, ((row + y) * side + x) * 4, ((row + top) * width + left) * 4, ((row + top) * width + left + w) * 4);
-    const png = nativeImage.createFromBitmap(square, { width: side, height: side }).resize({ width: 64, height: 64, quality: 'best' }).toPNG();
-    const url = IMAGE_ICON_PREFIX + png.toString('base64');
+    const square = trimmedSquare(pixels, width, height, 64);
+    if (!square) return null;
+    const url = IMAGE_ICON_PREFIX + square.toPNG().toString('base64');
     return validImageIcon(url) ? url : null;
   };
   const label = path.basename(file), original = finish(bitmap);

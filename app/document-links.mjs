@@ -29,8 +29,9 @@ export async function installedLinkApps({ refresh = false } = {}) {
   }));
   cached = Object.fromEntries(entries.filter(([, value]) => value)); checkedAt = Date.now(); return cached;
 }
+export const documentFile = (value, home = os.homedir()) => path.normalize(value.startsWith('~/') ? path.join(home, value.slice(2)) : value);
 export function createLinkOpener({ getApps = installedLinkApps, launch = (application, value) => exec('/usr/bin/open', ['-a', application, value], { timeout: 10_000 }), stat = fs.stat, home = os.homedir(), openExternal }) {
-  const localPath = link => path.normalize(link.path.startsWith('~/') ? path.join(home, link.path.slice(2)) : link.path);
+  const localPath = link => documentFile(link.path, home);
   async function describe(value) {
     const link = parseAppLink(value);
     const apps = await getApps();

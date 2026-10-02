@@ -44,6 +44,8 @@ Paste a local Markdown, text, HTML, or PDF path into a note to make it clickable
 
 CXTasks links are off by default. Margin checks whether CXTasks is installed before showing **Preferences → Integrations → Enable CXTasks links**. After you opt in, an uppercase `T` followed by a task number, such as `T42`, opens the matching task in CXTasks. Plain numbers, `task 42`, `#42`, lowercase `t42`, and references within code stay plain text. Existing `cxtasks://task/T42` links work. The formatting toolbar's link field accepts document paths and `T42` task references as well as web links.
 
+In the reading view, document and task links appear as chips, like smart chips in Google Docs: the icon of the app that opens them, then the target's own name. A pasted path shows the document's title: its HTML `<title>`, its Markdown front-matter title or first heading, or else its filename. A link you gave a label keeps your label. A chip for a document that has moved is dashed and faded. With CXTasks links enabled, a `T42` chip shows the task's number and title. Margin reads these from CXTasks' local database without changing it. Finished tasks are struck through, and tasks in Trash or the archive are faded. Chips refresh whenever the panel regains focus. While you edit, the same links appear as ordinary links.
+
 References point to the original document or task. They are recognized when rendering, so Margin does not copy the file or rewrite the stored note. Missing files and uninstalled apps show a useful error.
 
 ## Demo mode and an empty notebook

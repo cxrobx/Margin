@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { ipcMain } from 'electron';
+import { DatabaseSync } from 'node:sqlite';
 import { fileLink } from '../shared/app-links.mjs';
 import { installedLinkApps } from '../app/document-links.mjs';
 
@@ -14,12 +15,25 @@ export async function runSmoke(win, store, panel) {
   const document = path.join(store.dir, 'Design & café #2.md');
   await fs.writeFile(document, '# Linked document\n\nA local smoke-test note.');
   const href = fileLink(document);
-  const body = `${document}\n\nFollow T42 and task 86.\n\n42\n\nt42 and #42\n\n[Chosen document](${href})\n\n[Obsidian note](obsidian://open?path=${encodeURIComponent(document)})\n\n[Task link](cxtasks://task/T9)\n\n\`T100\`\n\n\`\`\`text\nT101\n${document}\n\`\`\`\n\n[Unsafe](javascript:alert(1))\n\n[Unsafe Obsidian](obsidian://new?vault=Notes&file=oops)`;
+  // Task chips read CXTasks' database read-only; point them at a fixture, not the user's tasks.
+  process.env.CXTASKS_DATA_DIR = path.join(store.dir, 'cxtasks'); await fs.mkdir(process.env.CXTASKS_DATA_DIR, { recursive: true });
+  const tasks = new DatabaseSync(path.join(process.env.CXTASKS_DATA_DIR, 'cxtasks.db'));
+  tasks.exec("CREATE TABLE tasks (id TEXT PRIMARY KEY, short_id INTEGER, title TEXT, status TEXT, deleted_at TEXT, archived_at TEXT); INSERT INTO tasks VALUES ('a', 42, 'Draw links as chips', 'in_progress', NULL, NULL), ('b', 9, 'Ship the release', 'done', NULL, NULL);");
+  tasks.close();
+  const body = `${document}\n\nFollow T42 and task 86.\n\n42\n\nt42 and #42\n\n[Chosen document](${href})\n\n[Obsidian note](obsidian://open?path=${encodeURIComponent(document)})\n\n[Task link](cxtasks://task/T9)\n\n\`T100\`\n\n\`\`\`text\nT101\n${document}\n\`\`\`\n\n[Unsafe](javascript:alert(1))\n\n[Unsafe Obsidian](obsidian://new?vault=Notes&file=oops)\n\n[Old plan](${fileLink(path.join(store.dir, 'Gone.md'))})`;
   const note = await store.create({ title: 'Notes, artifacts & tasks', body });
   panel.show();
   await wait(`document.querySelector('[data-note-id="${note.id}"] .note-body a[data-link-kind="document"]')`);
   const readLinks = () => run(`Array.from(document.querySelectorAll('[data-note-id="${note.id}"] .note-body a')).map(a => ({href:a.getAttribute('href'), kind:a.dataset.linkKind, text:a.textContent}))`);
   assert.equal((await store.read()).settings.cxtasksLinks, false);
+  const chip = (selector, index = 0) => run(`(a => a && { label: a.querySelector('.chip-label')?.textContent, ref: a.querySelector('.chip-ref')?.textContent, icon: a.querySelector('img.chip-icon')?.getAttribute('src')?.slice(0, 22), state: a.dataset.state, title: a.title })(document.querySelectorAll('[data-note-id="${note.id}"] .note-body a.link-chip${selector}')[${index}])`);
+  await wait(`document.querySelector('[data-note-id="${note.id}"] a.link-chip[data-link-kind="document"] img.chip-icon')`);
+  const bare = await chip('[data-link-kind="document"]');
+  assert.deepEqual({ label: bare.label, icon: bare.icon, state: bare.state }, { label: 'Linked document', icon: 'data:image/png;base64,', state: undefined }, 'A pasted path shows the Onyx icon and the document title');
+  assert.match(bare.title, /Open in Onyx/);
+  assert.equal((await chip('[data-link-kind="document"]', 1)).label, 'Chosen document', 'A labelled link keeps its own label');
+  const gone = await chip('[data-link-kind="document"]', 2);
+  assert.deepEqual({ label: gone.label, state: gone.state }, { label: 'Old plan', state: 'missing' });
   assert.equal((await readLinks()).filter(link => link.kind === 'task').length, 0, 'Task links must be inactive by default');
   assert.equal((await run(`window.margin.openLink('T42')`)).ok, false, 'Native task opening also requires opt-in');
   await click('Preferences');
@@ -34,7 +48,13 @@ export async function runSmoke(win, store, panel) {
   await wait(`document.querySelectorAll('[data-note-id="${note.id}"] a[data-link-kind="task"]').length === 2`);
   const links = await readLinks();
   assert.deepEqual(links.filter(link => link.kind === 'task').map(link => link.href), ['cxtasks://task/T42', 'cxtasks://task/T9']);
-  assert.equal(links.filter(link => link.kind === 'document').length, 2);
+  assert.equal(links.filter(link => link.kind === 'document').length, 3);
+  await wait(`document.querySelector('[data-note-id="${note.id}"] a.link-chip[data-link-kind="task"] .chip-label')?.textContent === 'Draw links as chips'`);
+  const task = await chip('[data-link-kind="task"]');
+  assert.deepEqual({ ref: task.ref, label: task.label, icon: task.icon }, { ref: 'T42', label: 'Draw links as chips', icon: 'data:image/png;base64,' }, 'A bare T-number shows the CXTasks icon, its number, and the task title');
+  assert.match(task.title, /T42 · Draw links as chips · In progress/);
+  await wait(`document.querySelectorAll('[data-note-id="${note.id}"] a.link-chip[data-link-kind="task"]')[1]?.dataset.state === 'done'`);
+  assert.equal((await chip('[data-link-kind="task"]', 1)).label, 'Task link', 'A labelled task link keeps its label and shows when the task is done');
   assert.equal(links.filter(link => link.kind === 'obsidian').length, 1);
   assert.ok(!links.some(link => link.href.includes('T100') || link.href.includes('T101') || link.href.includes('javascript:') || link.href.includes('obsidian://new')));
   await run(`document.querySelector('[data-note-id="${note.id}"] a[data-link-kind="document"]').click()`);
@@ -55,6 +75,20 @@ export async function runSmoke(win, store, panel) {
   assert.equal((await store.get(note.id)).body, body, 'Recognizing a reference must not rewrite the saved note');
   const output = process.env.MARGIN_ARTIFACTS_DIR || path.join(store.dir, 'artifacts'); await fs.mkdir(output, { recursive: true });
   await fs.writeFile(path.join(output, 'margin-document-task-links.png'), (await win.webContents.capturePage()).toPNG());
+  // Chips take their colours from the theme's text colour, so they must read in dark mode and on a tinted Glass card.
+  for (const [settings, color, shot] of [[{ theme: 'dark' }, 'paper', 'margin-link-chips-dark.png'], [{ theme: 'light', themeId: 'cxtasks-glass' }, 'rose', 'margin-link-chips-glass.png']]) {
+    assert.equal((await run(`window.margin.settings(${JSON.stringify(settings)})`)).ok, true);
+    await store.update(note.id, { color });
+    await wait(`document.documentElement.dataset.theme === ${JSON.stringify(settings.theme)} && document.querySelector('[data-note-id="${note.id}"]').classList.contains('color-${color}')`);
+    const ink = await run(`(a => [getComputedStyle(a).color, getComputedStyle(a.closest('.note-card')).backgroundColor])(document.querySelector('[data-note-id="${note.id}"] a.link-chip'))`);
+    assert.notEqual(ink[0], ink[1], 'Chip text must differ from its card');
+    await new Promise(resolve => setTimeout(resolve, 250));
+    await fs.writeFile(path.join(output, shot), (await win.webContents.capturePage()).toPNG());
+  }
+  assert.equal((await run(`window.margin.settings({ theme: 'light', themeId: 'default' })`)).ok, true);
+  await store.update(note.id, { color: 'paper' });
+  // Let the panel see the new revision before editing, or the editor would save over a stale one.
+  await wait(`document.documentElement.dataset.theme === 'light' && document.querySelector('[data-note-id="${note.id}"]').classList.contains('color-paper')`);
   await run(`document.querySelector('[data-note-id="${note.id}"] .card-title').click()`);
   await wait(`Boolean(document.querySelector('.rich-body')?.editor)`);
   await run(`const ed=document.querySelector('.rich-body').editor; ed.commands.setContent('Chosen document',{contentType:'markdown'}); ed.chain().focus().setTextSelection({from:1,to:16}).run();`);
@@ -85,5 +119,5 @@ export async function runSmoke(win, store, panel) {
   await run(`window.dispatchEvent(new Event('focus'))`);
   await new Promise(resolve => setTimeout(resolve, 200));
   assert.equal(await run(`Boolean(document.querySelector('[aria-label="Enable CXTasks links"]'))`), false, 'Do not surface the integration when CXTasks is absent');
-  console.log('Link smoke passed: installed-app detection, plain file paths, named document links, Obsidian URIs, strict uppercase T-number references, default-off integration, installed-app-only preference, opt-in and opt-out, code exclusion, safe URL handling, app routing through IPC, both-app choices, editor document/task links, and saved Markdown.');
+  console.log('Link smoke passed: installed-app detection, document and task chips (app icon, real title, own label, missing and done states), plain file paths, named document links, Obsidian URIs, strict uppercase T-number references, default-off integration, installed-app-only preference, opt-in and opt-out, code exclusion, safe URL handling, app routing through IPC, both-app choices, editor document/task links, and saved Markdown.');
 }
