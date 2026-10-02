@@ -112,12 +112,28 @@ export async function runSmoke(win, store, panel) {
   await click('Back to notes');
   await wait(`!document.querySelector('[data-note-id="${note.id}"] a[data-link-kind="task"]')`);
   assert.equal((await run(`window.margin.openLink('T86')`)).ok, false);
-  // Simulate CXTasks being absent without uninstalling the user's application.
-  ipcMain.removeHandler('app:link-apps');
-  ipcMain.handle('app:link-apps', () => ({ ok: true, value: { cxtasks: false } }));
+  // Chips belong to the apps that open them. Simulate Onyx, then CXTasks too, being
+  // absent without uninstalling the user's applications.
+  const documentLinks = () => run(`Array.from(document.querySelectorAll('[data-note-id="${note.id}"] a[data-link-kind="document"]')).map(a => ({ text: a.textContent, title: a.title, chip: a.classList.contains('link-chip'), arrow: Boolean(a.querySelector('svg.lucide-arrow-right')) }))`);
+  const installed = value => { ipcMain.removeHandler('app:link-apps'); ipcMain.handle('app:link-apps', () => ({ ok: true, value })); };
+  await store.update(note.id, { body }); // The editor checks above replaced it.
+  installed({ cxtasks: true, onyx: false });
+  assert.equal((await run(`window.margin.settings({ cxtasksLinks: true })`)).ok, true);
+  await run(`window.dispatchEvent(new Event('focus'))`);
+  await wait(`!document.querySelector('[data-note-id="${note.id}"] a.link-chip[data-link-kind="document"]') && document.querySelectorAll('[data-note-id="${note.id}"] a.link-chip[data-link-kind="task"]').length === 2`);
+  const withoutOnyx = await documentLinks();
+  assert.deepEqual(withoutOnyx.map(link => link.chip), [false, false, false], 'Without Onyx, document links are ordinary links');
+  assert.deepEqual(withoutOnyx[1], { text: 'Chosen document', title: 'Open document · Right-click to choose Onyx or Obsidian', chip: false, arrow: true });
+  assert.equal(withoutOnyx[0].text, document, 'A pasted path reads as written, not as a looked-up title');
+  installed({ cxtasks: false, onyx: false });
   await click('Preferences');
   await run(`window.dispatchEvent(new Event('focus'))`);
   await new Promise(resolve => setTimeout(resolve, 200));
   assert.equal(await run(`Boolean(document.querySelector('[aria-label="Enable CXTasks links"]'))`), false, 'Do not surface the integration when CXTasks is absent');
-  console.log('Link smoke passed: installed-app detection, document and task chips (app icon, real title, own label, missing and done states), plain file paths, named document links, Obsidian URIs, strict uppercase T-number references, default-off integration, installed-app-only preference, opt-in and opt-out, code exclusion, safe URL handling, app routing through IPC, both-app choices, editor document/task links, and saved Markdown.');
+  await click('Back to notes');
+  await wait(`!document.querySelector('[data-note-id="${note.id}"] .link-chip') && !document.querySelector('[data-note-id="${note.id}"] a[data-link-kind="task"]')`);
+  assert.equal((await documentLinks()).filter(link => !link.chip && link.arrow).length, 3, 'Without either app, links read exactly as before');
+  assert.match(await run(`document.querySelector('[data-note-id="${note.id}"] .note-body').textContent`), /Follow T42 and task 86\./, 'T42 stays plain text');
+  await fs.writeFile(path.join(output, 'margin-links-without-apps.png'), (await win.webContents.capturePage()).toPNG());
+  console.log('Link smoke passed: installed-app detection, document and task chips (app icon, real title, own label, missing and done states, only with Onyx or CXTasks installed), plain file paths, named document links, Obsidian URIs, strict uppercase T-number references, default-off integration, installed-app-only preference, opt-in and opt-out, code exclusion, safe URL handling, app routing through IPC, both-app choices, editor document/task links, and saved Markdown.');
 }

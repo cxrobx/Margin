@@ -2,3 +2,5 @@ import { createContext } from 'react';
 
 // Task integration starts disabled until the user opts in and CXTasks is found.
 export const TaskLinksContext = createContext(false);
+// Document chips appear only when Onyx is installed; otherwise links read as before.
+export const DocumentChipsContext = createContext(false);

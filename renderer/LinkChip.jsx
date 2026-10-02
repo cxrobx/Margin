@@ -3,7 +3,6 @@ import { CheckSquare, FileText } from 'lucide-react';
 import { searchParts } from './search.mjs';
 import { useLinkPreview } from './link-previews.mjs';
 
-const appNames = { onyx: 'Onyx', obsidian: 'Obsidian', cxtasks: 'CXTasks' };
 const statusNames = { inbox: 'Inbox', todo: 'To do', in_progress: 'In progress', in_review: 'In review', done: 'Done', archived: 'Archived', trashed: 'In Trash' };
 function Highlighted({ text, query }) { return searchParts(text, query || '').map((part, index) => part.match ? <mark className="search-match" key={index}>{part.text}</mark> : part.text); }
 
@@ -18,10 +17,9 @@ export default function LinkChip({ link, label, bare, query, onClick, onContextM
   const status = preview?.status;
   const state = preview?.missing ? 'missing' : status === 'done' ? 'done' : ['archived', 'trashed'].includes(status) ? 'away' : undefined;
   const Icon = task ? CheckSquare : FileText;
-  const app = appNames[preview?.app];
   const tooltip = task
     ? (preview?.missing ? `${reference} isn't in CXTasks` : [[reference, title, statusNames[status]].filter(Boolean).join(' · '), 'Open in CXTasks'].join('\n'))
-    : [title, link.path, preview?.missing ? 'This document has moved or is no longer available.' : `Open in ${app || 'Onyx or Obsidian'} · Right-click to choose Onyx or Obsidian`].join('\n');
+    : [title, link.path, preview?.missing ? 'This document has moved or is no longer available.' : 'Open in Onyx · Right-click to choose Onyx or Obsidian'].join('\n');
   return <a href={link.href} className="link-chip" data-link-kind={link.kind} data-state={state} title={tooltip} onClick={onClick} onContextMenu={onContextMenu}>
     {preview?.icon ? <img className="chip-icon" src={preview.icon} alt="" draggable={false} /> : <Icon className="chip-icon" size={14} aria-hidden="true" />}
     {bare && task && title && <span className="chip-ref"><Highlighted text={reference} query={query} /></span>}

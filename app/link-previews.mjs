@@ -44,6 +44,7 @@ export function readTask(reference, database = taskDatabase()) {
 }
 // What a reading-view chip shows for a link: the app that opens it, that app's
 // icon, and the target's own title. Nothing here opens or changes the target.
+// Chips belong to Onyx and CXTasks users only; without the app there is no preview.
 export function createLinkPreviews({ fileIcon, getApps = installedLinkApps, stat = fs.stat, read = readHead, task = readTask, home = os.homedir() }) {
   const icons = new Map(), titles = new Map();
   const icon = application => {
@@ -54,14 +55,13 @@ export function createLinkPreviews({ fileIcon, getApps = installedLinkApps, stat
   async function preview(value, { tasks = false } = {}) {
     const link = parseAppLink(value);
     const apps = await getApps();
-    if (link.kind === 'document') {
+    if (link.kind === 'document' && apps.onyx) {
       const file = documentFile(link.path, home);
-      const app = apps.onyx ? 'onyx' : apps.obsidian ? 'obsidian' : null;
       let info; try { info = await stat(file); } catch {}
-      if (!info?.isFile()) return { kind: 'document', app, icon: await icon(apps[app]), title: documentTitle(file), missing: true };
+      if (!info?.isFile()) return { kind: 'document', app: 'onyx', icon: await icon(apps.onyx), title: documentTitle(file), missing: true };
       const key = `${info.mtimeMs}:${info.size}`;
       if (titles.get(file)?.key !== key) titles.set(file, { key, title: documentTitle(file, /\.pdf$/i.test(file) ? '' : await read(file).catch(() => '')) });
-      return { kind: 'document', app, icon: await icon(apps[app]), title: titles.get(file).title, missing: false };
+      return { kind: 'document', app: 'onyx', icon: await icon(apps.onyx), title: titles.get(file).title, missing: false };
     }
     if (link.kind === 'task' && tasks && apps.cxtasks) {
       let found = null, known = true;

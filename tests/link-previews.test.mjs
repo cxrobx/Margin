@@ -71,9 +71,17 @@ test('previews pair the opening app icon with the target title, cache titles by 
   assert.equal(await previews.preview('https://example.com', { tasks: true }), null);
   assert.deepEqual(iconCalls, ['/Applications/Onyx.app', '/Applications/CXTasks.app'], 'Each app icon is loaded once');
 
-  const obsidianOnly = createLinkPreviews({ ...options, getApps: async () => ({ obsidian: apps.obsidian }), fileIcon: async () => ({ isEmpty: () => true }) });
-  assert.deepEqual(await obsidianOnly.preview(doc), { kind: 'document', app: 'obsidian', icon: null, title: 'Plan v2', missing: false });
-  assert.equal(await obsidianOnly.preview('T42', { tasks: true }), null, 'No task preview without CXTasks installed');
-  const noApps = createLinkPreviews({ ...options, getApps: async () => ({}), fileIcon: async () => { throw new Error('no icon'); } });
-  assert.equal((await noApps.preview(doc)).icon, null);
+  assert.equal((await createLinkPreviews({ ...options, fileIcon: async () => ({ isEmpty: () => true }) }).preview(doc)).icon, null, 'An app without a drawable icon falls back to the plain glyph');
+  assert.equal((await createLinkPreviews({ ...options, fileIcon: async () => { throw new Error('no icon'); } }).preview(doc)).icon, null);
+});
+
+test('without Onyx or CXTasks there are no previews and nothing is read', async () => {
+  let looked = 0;
+  const options = { fileIcon: async () => { looked++; }, stat: async () => { looked++; return { isFile: () => true, mtimeMs: 1, size: 1 }; }, read: async () => { looked++; return ''; }, task: () => { looked++; return null; } };
+  for (const apps of [{}, { obsidian: '/Applications/Obsidian.app' }, { obsidian: '/Applications/Obsidian.app', cxtasks: '/Applications/CXTasks.app' }]) {
+    const previews = createLinkPreviews({ ...options, getApps: async () => apps });
+    assert.equal(await previews.preview('/Users/me/Notes/Plan.md'), null, `No document chip with ${Object.keys(apps).join(', ') || 'no apps'}`);
+  }
+  for (const apps of [{}, { onyx: '/Applications/Onyx.app' }]) assert.equal(await createLinkPreviews({ ...options, getApps: async () => apps }).preview('T42', { tasks: true }), null, 'No task chip without CXTasks');
+  assert.equal(looked, 0, 'Nothing is opened, read or queried for an app that is not installed');
 });
