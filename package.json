@@ -1,6 +1,6 @@
 {
   "name": "margin-notes",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "description": "A quiet screen-edge notebook with a local MCP server.",
   "type": "module",
@@ -117,7 +117,7 @@
         ]
       }
     ],
-    "copyright": "Copyright \u00a9 2026 CX Ventures LLC"
+    "copyright": "Copyright © 2026 CX Ventures LLC"
   },
   "license": "BUSL-1.1",
   "author": "CX Ventures LLC",
