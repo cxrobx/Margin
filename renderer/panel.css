@@ -6,21 +6,17 @@
   border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
   background: color-mix(in srgb, var(--bg) 92%, transparent);
 }
+/* Search shares the top row with New note and Hide; the panel has no wordmark. */
 .main-header {
-  height: 62px;
+  height: 54px;
   flex-shrink: 0;
-  padding: 0 17px 0 20px;
+  gap: 8px;
+  padding: 0 12px 0 17px;
   -webkit-app-region: no-drag;
 }
-.main-header .brand {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: 20px;
-  font-weight: 650;
-  letter-spacing: -.4px;
-}
-.panel-header-actions { display: flex; align-items: center; gap: 6px; }
+.panel-header-actions { display: flex; align-items: center; gap: 2px; }
 .panel-header-actions .icon-button { width: 28px; height: 30px; }
-.search-box { margin: 0 17px 13px; height: 35px; }
+.search-box { flex: 1; min-width: 0; margin: 0; height: 35px; }
 .folders { padding: 0 17px 12px; }
 .folders > button:not(.icon-button) { font-size: 11px; padding: 7px 8px; }
 .section-heading { padding: 13px 18px 11px; }
@@ -43,7 +39,7 @@
 .editor-title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 23px; font-weight: 550; }
 .editor-body { font-size: 13px; }
 .editor-footer { padding-left: 20px; padding-right: 20px; }
-@media (max-height: 700px) { .main-header { height: 56px; padding-top: 0; } .folders { padding-bottom: 10px; } }
+@media (max-height: 700px) { .folders { padding-bottom: 10px; } }
 
 .note-card[draggable="true"], .note-drag-handle, .folders > .folder-tab { cursor: grab; }
 .note-card[draggable="true"]:active, .note-drag-handle:active, .folders > .folder-tab:active { cursor: grabbing; }
@@ -71,7 +67,6 @@
 
 .notes-scroll > .note-card:first-of-type.drop-before::before { top: 0; }
 
-.demo-badge { font-size: 9px; font-weight: 500; letter-spacing: 0; padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); margin-left: 8px; }
 .demo-banner { flex-shrink: 0; padding: 7px 18px; border-bottom: 1px solid var(--line); background: var(--soft); display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 10px; }
 .demo-banner button { display: flex; align-items: center; gap: 5px; color: var(--text); }
 .notebook-pref > span { display: flex; flex-direction: column; gap: 4px; }

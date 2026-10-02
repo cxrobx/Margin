@@ -313,7 +313,7 @@ export async function runSmoke(win, store, panel) {
     const colourNoteResult = await client.callTool({name:'create_note',arguments:{title:'A quieter vault palette',body:'# A little colour\n\nOrdinary text stays neutral.\n\n## Plans and next steps\n\n### Things worth keeping\n\n#### A little context\n\n##### Details\n\n###### References\n\n[One useful link](https://example.com)',pinned:true}});
     const colourNote=JSON.parse(colourNoteResult.content[0].text);
     await waitFor(`Boolean(document.querySelector('[data-note-id="${colourNote.id}"] .markdown h6'))`);
-    assert.equal(await run(`getComputedStyle(document.querySelector('[data-note-id="${colourNote.id}"] .card-title')).color`), await run(`getComputedStyle(document.querySelector('.main-header .brand')).color`), 'Card titles remain neutral');
+    assert.equal(await run(`getComputedStyle(document.querySelector('[data-note-id="${colourNote.id}"] .card-title')).color`), await run(`getComputedStyle(document.body).color`), 'Card titles remain neutral');
     assert.notEqual(await run(`getComputedStyle(document.querySelector('[data-note-id="${colourNote.id}"] .markdown h1')).color`), await run(`getComputedStyle(document.querySelector('[data-note-id="${colourNote.id}"] .markdown')).color`), 'Markdown headings retain a softened hint of colour');
     await run(`document.querySelector('[data-note-id="${colourNote.id}"]').scrollIntoView({block:'start'})`);
     await screenshot('margin-vault-colours-light.png');
@@ -428,7 +428,7 @@ export async function runSmoke(win, store, panel) {
     await run(`window.margin.settings({edge:'right'})`);
     panel.show(); await waitNative(() => panel.motion.phase === 'open');
     await click('Leave demo notebook');
-    await waitFor(`!document.querySelector('.demo-badge') && document.querySelectorAll('.note-card').length === 0`);
+    await waitFor(`!document.querySelector('.demo-banner') && document.querySelectorAll('.note-card').length === 0`);
     assert.equal((await store.read()).demo, null);
     // Preferences must switch notebooks without carrying drafts, filters or search.
     const regularResult = await client.callTool({ name: 'create_note', arguments: { title: 'Regular notebook', body: 'Keep me after a demo.', source: 'Codex' } });
@@ -441,7 +441,7 @@ export async function runSmoke(win, store, panel) {
     await run(`document.querySelector('[aria-label="Start demo mode"]').scrollIntoView({block:'center'})`);
     await screenshot('margin-demo-preferences.png');
     await click('Start demo mode');
-    await waitFor(`Boolean(document.querySelector('.demo-badge')) && document.querySelectorAll('.note-card').length === 6`);
+    await waitFor(`Boolean(document.querySelector('.demo-banner')) && document.querySelectorAll('.note-card').length === 6`);
     assert.equal(await run(`Boolean(document.querySelector('.draft-notice'))`), false, 'Regular drafts must stay out of the demo');
     await screenshot('margin-demo-mode.png');
     const demoInputResult = await client.callTool({ name: 'create_note', arguments: { title: 'Temporary demo input', source: 'Codex' } });
@@ -450,7 +450,7 @@ export async function runSmoke(win, store, panel) {
     await click('Preferences');
     assert.equal(await run(`document.querySelector('[aria-label="Reset to default"]').disabled`), true, 'Reset must be unavailable while demo mode is active');
     await click('Exit demo mode');
-    await waitFor(`!document.querySelector('.demo-badge') && Boolean(document.querySelector('[data-note-id="${regularNote.id}"]'))`);
+    await waitFor(`!document.querySelector('.demo-banner') && Boolean(document.querySelector('[data-note-id="${regularNote.id}"]'))`);
     assert.equal(await run(`Boolean(document.querySelector('[data-note-id="${demoInput.id}"]'))`), false);
     assert.equal(await run(`Boolean(document.querySelector('.draft-notice'))`), true, 'Leaving demo mode restores the regular draft');
     await click('Preferences');

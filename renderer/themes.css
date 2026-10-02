@@ -1,5 +1,5 @@
 :root { --ui-font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; --display-font: Georgia, serif; font-family: var(--ui-font); }
-.main-header .brand, .card-title, .editor-title { font-family: var(--ui-font); }
+.card-title, .editor-title { font-family: var(--ui-font); }
 .connection-content h1, .preferences-content h1, .activity-content h1 { font-family: var(--display-font); }
 :root[data-custom-theme=true] .app-shell { background: var(--bg); }
 .save-button, .primary { color: var(--button-ink, var(--surface)); }
