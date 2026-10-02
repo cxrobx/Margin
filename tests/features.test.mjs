@@ -8,6 +8,7 @@ import { NoteStore } from '../shared/store.mjs';
 import { noteHistory, restoreNoteVersion, duplicateNote, exportBackup, prepareBackup, applyBackup, listBackups, importMarkdown, exportMarkdown, collectMarkdown } from '../shared/notebook-features.mjs';
 import { noteLink, noteIdFromLink } from '../shared/note-links.mjs';
 import { matchesNote, searchParts, rehypeSearch } from '../renderer/search.mjs';
+import { noteLabel } from '../shared/schema.mjs';
 async function fixture(t) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-features-'));
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
@@ -122,4 +123,22 @@ test('Alfred capture saves multiline Unicode input, respects demo mode, and reje
   const empty = await capture('   '); assert.equal(empty.code, 1); assert.match(empty.error, /clipboard is empty/);
   await store.setDemoMode(true); assert.equal(JSON.parse((await capture('Demo capture')).output).demoMode, true);
   await store.setDemoMode(false); assert.equal((await store.list()).notes.length, 1);
+});
+
+test('notes may be untitled: they save, duplicate, export and are named by their first line', async t => {
+  const { dir, store } = await fixture(t);
+  const note = await store.create({ body: '- [ ] Call the bank\nThen the plumber', folderId: 'work' });
+  assert.equal(note.title, '');
+  assert.equal(noteLabel(note), 'Call the bank');
+  assert.equal(noteLabel({ title: '', body: '' }), 'Untitled note');
+  const cleared = await store.update(note.id, { title: '   ', expectedRevision: note.revision });
+  assert.equal(cleared.title, '', 'A blank title is stored as untitled, not refused');
+  await assert.rejects(() => store.createFolder('  '), 'Folder names stay required');
+  assert.equal((await duplicateNote(store, note.id)).title, '', 'A copy of an untitled note stays untitled');
+  const output = path.join(dir, 'markdown');
+  await exportMarkdown(store, output, { folderId: 'work' });
+  const [file] = await collectMarkdown(output);
+  assert.match(path.basename(file.file), /^Call the bank-/);
+  assert.equal(await fs.readFile(file.file, 'utf8'), '- [ ] Call the bank\nThen the plumber\n', 'No empty "# " heading is written');
+  assert.equal((await store.read()).activity[0].title, 'Call the bank');
 });

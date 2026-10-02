@@ -12,6 +12,7 @@ import { useNoteResize, NoteResizeHandle } from './note-resize.jsx';
 import { NoteAutosave } from './note-autosave.mjs';
 import { imageAttachmentId, separateAttachments } from '../shared/attachments.mjs';
 import { Undo2, Redo2 } from 'lucide-react';
+import { noteLabel } from '../shared/schema.mjs';
 import { ArrowLeft, ArrowRight, Check, CheckSquare, ChevronDown, ChevronRight, Code2, Copy, Download, FileText, Folder, FolderPlus, GripVertical, Inbox, Link2, Minus, MoreHorizontal, Paperclip, Pin, Plus, Search, Settings, Sparkles, Trash2, X } from 'lucide-react';
 import './style.css';
 import './panel.css';
@@ -100,7 +101,7 @@ function NoteCard({ note, folder, edit, act, trashView, reorder, noteIds, folder
     if (e.dataTransfer.files.length && !trashView) act(api.dropFiles(note.id, Array.from(e.dataTransfer.files)));
   };
   return <article ref={cardRef} className={`note-card color-${note.color} ${!expanded ? 'folded' : ''} ${reorder.className('note', note.id)}`} data-note-id={note.id}
-    draggable={!trashView} tabIndex={trashView ? undefined : 0} aria-label={note.title} aria-keyshortcuts={trashView ? undefined : 'Enter Alt+ArrowUp Alt+ArrowDown'}
+    draggable={!trashView} tabIndex={trashView ? undefined : 0} aria-label={noteLabel(note)} aria-keyshortcuts={trashView ? undefined : 'Enter Alt+ArrowUp Alt+ArrowDown'}
     onPointerDownCapture={e => { blockDrag.current = Boolean(e.target.closest('button:not(.card-title), a, input, textarea, select, .note-body, .attachments')); e.currentTarget.draggable = !trashView && !blockDrag.current; }}
     onDragStart={e => { if (trashView || blockDrag.current) { e.preventDefault(); return; } reorder.start(e, 'note', note.id, note.folderId); }}
     onDragEnd={reorder.end} onDragLeave={e => reorder.leave(e, 'note', note.id)}
@@ -120,7 +121,7 @@ function NoteCard({ note, folder, edit, act, trashView, reorder, noteIds, folder
         {note.pinned && <Pin size={13} className="pinned-icon" fill="currentColor" />}
         <IconButton label={note.collapsed ? 'Expand note' : 'Fold note'} onClick={() => act(api.update(note.id, { collapsed: !note.collapsed }))}>{note.collapsed ? <ChevronDown size={15} /> : <Minus size={15} />}</IconButton>
         <div className="menu-wrap" ref={menuRef}>
-          <IconButton label={`Actions for ${note.title}`} onClick={() => setMenu(!menu)}><MoreHorizontal size={17} /></IconButton>
+          <IconButton label={`Actions for ${noteLabel(note)}`} onClick={() => setMenu(!menu)}><MoreHorizontal size={17} /></IconButton>
           {menu && <div className="popup-menu">
             {trashView ? <button onClick={() => { act(api.restore(note.id), 'Note restored'); setMenu(false); }}><ArrowLeft size={14} />Restore note</button> : <>
               <button onClick={() => { edit(note); setMenu(false); }}><FileText size={14} />Edit note</button>
@@ -138,7 +139,8 @@ function NoteCard({ note, folder, edit, act, trashView, reorder, noteIds, folder
         </div>
       </div>
     </header>
-    <button className="card-title" title={trashView ? undefined : 'Double-click to edit'} onClick={e => { if (e.detail === 0 && !trashView) edit(note); }}><Highlighted text={note.title} query={query} /></button>
+    {/* An untitled card opens on its writing; folded, its first line stands in. */}
+    {(note.title || !expanded) && <button className={`card-title ${note.title ? '' : 'untitled'}`} title={trashView ? undefined : 'Double-click to edit'} onClick={e => { if (e.detail === 0 && !trashView) edit(note); }}><Highlighted text={note.title || noteLabel(note)} query={query} /></button>}
     {expanded && <div ref={resize.body} style={resize.style} className="markdown note-body"><Markdown body={note.body} note={trashView ? null : note} act={act} query={query} />
     {separateAttachments(note).length > 0 && <div className="attachments">{separateAttachments(note).map(a => <button key={a.id} onClick={() => act(api.openAttachment(a.id))} title={`Open ${a.name}`}>
       {a.mime.startsWith('image/') ? <img src={`margin://attachment/${a.id}`} alt={a.name} /> : <span><Paperclip size={14} />{a.name}</span>}
@@ -249,10 +251,10 @@ const Editor = React.forwardRef(function Editor({ initial, focus, folders, close
   };
   const folder = folders.find(f => f.id === draft.folderId);
   const KindIcon = kindIcons[draft.kind];
-  return <article ref={card} className={`note-card color-${draft.color} editor inline-editor`} data-note-id={draft.id} aria-label={draft.id ? `Editing ${draft.title || 'note'}` : 'New note'}>
+  return <article ref={card} className={`note-card color-${draft.color} editor inline-editor`} data-note-id={draft.id} aria-label={draft.id ? `Editing ${noteLabel(draft)}` : 'New note'}>
     <NoteCaret card={card} bodyCaret={() => rich.current?.caretRect()} suspended={suspended} />
     <header className="card-header">
-      <span className={`note-type hue-${({ note: 'teal', checklist: 'green', link: 'blue', code: 'purple' })[draft.kind]}`}><GripVertical size={12} className="drag-grip" /><button className="inline-note-icon" aria-label="Note icon and color" title="Icon & color" onClick={() => chooseIcon({ ...draft, name: draft.title || 'Untitled note', fallback: KindIcon, save: async patch => { change(patch); const ok = await autosave.save(); return { ok, value: autosave.draft, error: autosave.error }; } })}><NodeIcon icon={draft.icon} iconColor={draft.iconColor} fallback={KindIcon} size={13} /></button>{kindNames[draft.kind]}</span>
+      <span className={`note-type hue-${({ note: 'teal', checklist: 'green', link: 'blue', code: 'purple' })[draft.kind]}`}><GripVertical size={12} className="drag-grip" /><button className="inline-note-icon" aria-label="Note icon and color" title="Icon & color" onClick={() => chooseIcon({ ...draft, name: noteLabel(draft), fallback: KindIcon, save: async patch => { change(patch); const ok = await autosave.save(); return { ok, value: autosave.draft, error: autosave.error }; } })}><NodeIcon icon={draft.icon} iconColor={draft.iconColor} fallback={KindIcon} size={13} /></button>{kindNames[draft.kind]}</span>
       <div className="card-actions">
         <IconButton label="Undo" aria-keyshortcuts="Meta+Z" disabled={!history.undo} onMouseDown={e => e.preventDefault()} onClick={() => rich.current?.undo()}><Undo2 size={14} /></IconButton>
         <IconButton label="Redo" aria-keyshortcuts="Meta+Shift+Z" disabled={!history.redo} onMouseDown={e => e.preventDefault()} onClick={() => rich.current?.redo()}><Redo2 size={14} /></IconButton>
@@ -431,7 +433,7 @@ function App() {
   };
   const finishEditor = key => { if (editorKey.current !== key) return; editorKey.current = null; setEditor(null); setEditorId(null); setDraftExists(Boolean(localStorage.getItem(draftKey))); };
 
-  const chooseNoteIcon = note => setIconTarget({ ...note, kind: 'note', name: note.name || note.title, fallback: note.fallback || kindIcons[note.kind], save: note.save || ((patch, revision) => api.update(note.id, { ...patch, expectedRevision: revision })) });
+  const chooseNoteIcon = note => setIconTarget({ ...note, kind: 'note', name: note.name || noteLabel(note), fallback: note.fallback || kindIcons[note.kind], save: note.save || ((patch, revision) => api.update(note.id, { ...patch, expectedRevision: revision })) });
   const chooseSectionIcon = (id, name, fallback) => {
     const appearance = state.folders.find(folder => folder.id === id) || state.sectionAppearances[id] || {};
     setFolderMenu(false); setIconTarget({ ...appearance, kind: 'section', id, name, fallback, save: patch => api.sectionAppearance(id, patch) });
@@ -473,7 +475,7 @@ function App() {
     const listener = () => applyAppearance(state, media.matches, reducedTransparency);
     listener();
     media.addEventListener('change', listener); return () => media.removeEventListener('change', listener);
-  }, [state?.settings.theme, state?.settings.themeId, state?.settings.glassTransparency, state?.settings.themeSaturation, state?.themes, state?.vaultTheme, reducedTransparency]);
+  }, [state?.settings.theme, state?.settings.themeId, state?.settings.glassTransparency, state?.themes, state?.vaultTheme, reducedTransparency]);
   useEffect(() => {
     const listener = e => {
       if (iconTarget || e.defaultPrevented) return;

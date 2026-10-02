@@ -15,6 +15,7 @@ import { WindowMaterial } from './window-material.mjs';
 import { AppFocus } from './app-focus.mjs';
 import { createUpdater, createLog } from './updater.mjs';
 import { MONOKAI_SODA_THEME } from '../shared/themes.mjs';
+import { noteLabel } from '../shared/schema.mjs';
 import { parseAppLink } from '../shared/app-links.mjs';
 import { createLinkOpener, installedLinkApps } from './document-links.mjs';
 
@@ -363,7 +364,7 @@ if (store && settings) {
     const plan = await prepareBackup(store, file); const state = await store.read();
     const token = crypto.randomUUID();
     backupPlans.clear(); backupPlans.set(token, { plan, revision: state.revision });
-    return { token, revision: state.revision, name: plan.name, count: plan.notebook.notes.length, trash: plan.notebook.notes.filter(note => note.deletedAt).length, folders: plan.notebook.folders.map(folder => folder.name), titles: plan.notebook.notes.slice(0, 50).map(note => note.title) };
+    return { token, revision: state.revision, name: plan.name, count: plan.notebook.notes.length, trash: plan.notebook.notes.filter(note => note.deletedAt).length, folders: plan.notebook.folders.map(folder => folder.name), titles: plan.notebook.notes.slice(0, 50).map(noteLabel) };
   };
   register('notebook:prepare-import', async () => {
     if (!await flushEditor()) throw new Error('Finish or resolve your current edit before importing a backup.');
@@ -390,7 +391,7 @@ if (store && settings) {
     await flushEditor();
     if (noteId) {
       const note = await store.get(noteId);
-      const result = await dialog.showSaveDialog(win, { defaultPath: `${safeName(note.title)}.md`, filters: [{ name: 'Markdown', extensions: ['md'] }] });
+      const result = await dialog.showSaveDialog(win, { defaultPath: `${safeName(noteLabel(note))}.md`, filters: [{ name: 'Markdown', extensions: ['md'] }] });
       return result.canceled || !result.filePath ? null : exportMarkdown(store, result.filePath, { noteId });
     }
     const result = await dialog.showOpenDialog(win, { title: 'Choose where to export Markdown', properties: ['openDirectory', 'createDirectory'] });

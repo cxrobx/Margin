@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import lockfile from 'proper-lockfile';
-import { createNoteSchema, updateNoteSchema, stateSchema, settingsSchema, colorSchema, appearanceSchema, dividerLabel } from './schema.mjs';
+import { createNoteSchema, updateNoteSchema, stateSchema, settingsSchema, colorSchema, appearanceSchema, dividerLabel, noteLabel } from './schema.mjs';
 import { vaultPaletteSchema, savedThemeSchema } from './themes.mjs';
 import { moveItem, orderNotes, orderTabs, withDividers } from './order.mjs';
 import { canPlace, childrenOf, descendantIds, siblingsOf, uniqueName, validateFolderTree } from './folders.mjs';
@@ -97,7 +97,7 @@ export class NoteStore {
     });
   }
   event(state, action, note, source = 'You') {
-    state.activity.unshift({ id: randomUUID(), action, title: note.title || note.name, source, at: now() });
+    state.activity.unshift({ id: randomUUID(), action, title: note.name || noteLabel(note), source, at: now() });
     state.activity = state.activity.slice(0, 50);
   }
   find(state, id, allowDeleted = false) {

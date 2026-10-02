@@ -10,7 +10,7 @@ export const DEFAULT_THEME = {
 // CXTasks' built-in macOS palette and transparency curve. Keep the heading
 // hues separate from text: labels stay legible while their icons carry colour.
 export const GLASS_THEME = {
-  id: 'cxtasks-glass', name: 'CXTasks Glass', transparency: .38,
+  id: 'cxtasks-glass', name: 'Glass', transparency: .38,
   font: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif',
   dark: {
     bg: '#181818', surface: '#2d2d2d', text: '#ffffff', muted: '#afafaf', line: 'rgb(255 255 255 / .15)', green: '#3a83f7', soft: 'rgb(255 255 255 / .10)',
@@ -155,17 +155,6 @@ function hue(color) {
   return (angle * 60 + 360) % 360;
 }
 function hueDistance(a, b) { const d = Math.abs(a - b); return Math.min(d, 360 - d); }
-function readableVaultColour(color, p) {
-  const backgrounds = [p.bgPrimary, p.bgSidebar, p.bgSurface, p.bgElevated];
-  const score = c => Math.min(...backgrounds.map(bg => contrast(c, bg)));
-  if (score(color) >= 4.5) return color;
-  const destination = [p.ink, [0, 0, 0], [255, 255, 255]].sort((a, b) => score(b) - score(a))[0];
-  for (let step = 1; step <= 100; step++) {
-    const adjusted = mix(color, destination, step / 100);
-    if (score(adjusted) >= 4.5) return adjusted;
-  }
-  return destination;
-}
 function vaultColours(p) {
   const headings = VAULT_FALLBACK_HEADINGS[p.mode].map((fallback, i) => p.decoration?.headings?.[i] || fallback);
   const candidates = [...(p.decoration?.folders || []).map(f => f.color), ...headings, p.accent].filter(c => hue(c) !== null);
@@ -176,7 +165,9 @@ function vaultColours(p) {
     colours['hue-' + name] = closest && hueDistance(hue(closest), target) < 40 ? closest : fallback;
   }
   colours['vault-link'] = p.decoration?.link || p.accent;
-  return Object.fromEntries(Object.entries(colours).map(([name, c]) => [name, readableVaultColour(c, p)]));
+  // Worn exactly as Obsidian renders them: darkening light hues toward 4.5:1
+  // contrast turned every icon and heading brown.
+  return colours;
 }
 
 export function paletteTokens(p) {
@@ -196,23 +187,7 @@ export function paletteTokens(p) {
   return Object.fromEntries(Object.entries(colors).map(([key, color]) => [key, cssColor(color)]));
 }
 
-// Scale colour intensity while preserving perceptual lightness, hue and alpha.
-// The renderer resolves relative colours; the stored theme stays unchanged.
-export function saturatedColour(color, saturation = 1) {
-  return saturation === 1 || !/^(?:#[a-f0-9]{6}$|rgb\()/i.test(color) ? color : `oklch(from ${color} l calc(c * ${saturation}) h)`;
-}
-export function saturatedTokens(tokens, saturation = 1) {
-  return Object.fromEntries(Object.entries(tokens).map(([key, value]) => [key, saturatedColour(value, saturation)]));
-}
 export function resolveAppearance(state, systemDark, reducedTransparency = false) {
-  const appearance = baseAppearance(state, systemDark, reducedTransparency);
-  const saturation = state.settings.themeSaturation ?? 1;
-  if (saturation === 1) return appearance;
-  return { ...appearance, tokens: saturatedTokens(appearance.tokens, saturation),
-    folderColours: appearance.folderColours?.map(folder => ({ ...folder, color: saturatedColour(folder.color, saturation) })) };
-}
-
-function baseAppearance(state, systemDark, reducedTransparency = false) {
   const requestedMode = state.settings.theme === 'system' ? (systemDark ? 'dark' : 'light') : state.settings.theme;
   const id = state.settings.themeId;
   if (id === GLASS_THEME.id) {
@@ -224,6 +199,6 @@ function baseAppearance(state, systemDark, reducedTransparency = false) {
   const saved = state.themes.find(t => t.id === id);
   const palette = live || saved?.palettes[requestedMode];
   const mode = palette?.mode || requestedMode;
-  return { mode, material: palette ? 'vault' : 'default', folderColours: (palette?.decoration?.folders || []).map(f => ({ name: f.name, color: cssColor(readableVaultColour(f.color, palette)) })), custom: Boolean(palette), fallback: Boolean(saved && !palette),
+  return { mode, material: palette ? 'vault' : 'default', folderColours: (palette?.decoration?.folders || []).map(f => ({ name: f.name, color: cssColor(f.color) })), custom: Boolean(palette), fallback: Boolean(saved && !palette),
     tokens: palette ? paletteTokens(palette) : DEFAULT_THEME[mode], font: palette?.font || SYSTEM_FONT };
 }

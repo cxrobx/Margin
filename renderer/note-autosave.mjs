@@ -22,7 +22,7 @@ export class NoteAutosave {
     this.conflict = false;
   }
   get dirty() { return !this.saved || editableFields.some(key => this.draft[key] !== this.saved[key]); }
-  get canSave() { return Boolean(this.draft.id || this.draft.title.trim() || this.draft.body.trim()); }
+  get canSave() { return Boolean(this.draft.id || this.keepEmpty || this.draft.title.trim() || this.draft.body.trim()); }
   get status() {
     if (this.error) return 'Couldn’t save';
     if (this.pending || this.imagePending || this.paused || (this.dirty && this.canSave)) return 'Saving…';
@@ -62,7 +62,7 @@ export class NoteAutosave {
       while (this.dirty && this.canSave) {
         const snapshot = this.draft;
         const fields = Object.fromEntries(editableFields.filter(key => snapshot[key] !== undefined).map(key => [key, snapshot[key]]));
-        fields.title = snapshot.title.trim() || snapshot.body.trim().split('\n')[0].replace(/^[-#*\s]+/, '').slice(0, 80) || 'Untitled note';
+        fields.title = snapshot.title.trim();
         fields.source = 'You';
         if (this.wrapCode && fields.kind === 'code' && !fields.body.startsWith('```')) fields.body = '```\n' + fields.body + '\n```';
         let result;
@@ -125,7 +125,8 @@ export class NoteAutosave {
       try {
         if (!file.size || file.size > MAX_ATTACHMENT_BYTES) throw new Error('Images are limited to 25 MB.');
         const bytes = new Uint8Array(await file.arrayBuffer());
-        if (!this.canSave) this.update({ title: 'Untitled note' });
+        // An image alone is worth keeping, so create the empty note it lands in.
+        this.keepEmpty = true;
         if (!await this.saveWriting() || !this.draft.id) return false;
         this.paused = true; this.notify();
         const result = await this.api.pasteImage(this.draft.id, { bytes, name: file.name }, this.draft.revision);

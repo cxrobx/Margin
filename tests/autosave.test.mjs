@@ -30,7 +30,7 @@ test('pausing creates once and later edits use the returned revision', async () 
   autosave.update({ body: 'A thought' });
   await new Promise(resolve => setTimeout(resolve, 25));
   assert.equal(autosave.draft.id, 'created');
-  assert.equal(calls[0].title, 'A thought');
+  assert.equal(calls[0].title, '', 'A body-only note stays untitled');
   assert.equal(recovery(), null);
   autosave.update({ body: 'Another thought' });
   await saved.promise;
@@ -73,7 +73,7 @@ test('leaving immediately flushes the debounce and saves clearing an existing no
   assert.equal(await autosave.save(), true);
   assert.equal(updates.length, 1);
   assert.equal(updates[0].body, '');
-  assert.equal(updates[0].title, 'Untitled note');
+  assert.equal(updates[0].title, '', 'Clearing the title leaves the note untitled');
   autosave.dispose();
 });
 

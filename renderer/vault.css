@@ -1,6 +1,4 @@
 /* Onyx's measured reading colours, scoped to live and saved vault palettes. */
-:root[data-material=vault] { --vault-heading-strength: 60%; --vault-folder-strength: 55%; --vault-link-strength: 75%; }
-:root[data-material=vault][data-theme=dark] { --vault-heading-strength: 100%; --vault-folder-strength: 100%; --vault-link-strength: 100%; }
 :root[data-material=vault] .hue-blue { --section-hue: var(--hue-blue); }
 :root[data-material=vault] .hue-red { --section-hue: var(--hue-red); }
 :root[data-material=vault] .hue-green { --section-hue: var(--hue-green); }
@@ -19,18 +17,18 @@
 :root[data-material=vault] .note-type > .drag-grip { color: var(--muted); }
 :root[data-material=vault] .card-title, :root[data-material=vault] .editor-title { color: var(--text); }
 :root[data-material=vault] .markdown { color: var(--text); }
-:root[data-material=vault] .markdown h1 { color: color-mix(in srgb, var(--heading-1) var(--vault-heading-strength), var(--text)); }
-:root[data-material=vault] .markdown h2 { color: color-mix(in srgb, var(--heading-2) var(--vault-heading-strength), var(--text)); }
-:root[data-material=vault] .markdown h3 { color: color-mix(in srgb, var(--heading-3) var(--vault-heading-strength), var(--text)); }
-:root[data-material=vault] .markdown h4 { color: color-mix(in srgb, var(--heading-4) var(--vault-heading-strength), var(--text)); }
-:root[data-material=vault] .markdown h5 { color: color-mix(in srgb, var(--heading-5) var(--vault-heading-strength), var(--text)); }
-:root[data-material=vault] .markdown h6 { color: color-mix(in srgb, var(--heading-6) var(--vault-heading-strength), var(--text)); }
-:root[data-material=vault] .markdown a { color: color-mix(in srgb, var(--vault-link) var(--vault-link-strength), var(--text)); }
+:root[data-material=vault] .markdown h1 { color: var(--heading-1); }
+:root[data-material=vault] .markdown h2 { color: var(--heading-2); }
+:root[data-material=vault] .markdown h3 { color: var(--heading-3); }
+:root[data-material=vault] .markdown h4 { color: var(--heading-4); }
+:root[data-material=vault] .markdown h5 { color: var(--heading-5); }
+:root[data-material=vault] .markdown h6 { color: var(--heading-6); }
+:root[data-material=vault] .markdown a { color: var(--vault-link); }
 :root[data-material=vault] .card-location { color: var(--muted); }
-:root[data-material=vault] .card-location .folder-dot { background: color-mix(in srgb, var(--vault-folder-color, var(--green)) 45%, var(--muted)); }
-:root[data-material=vault] .pinned-icon, :root[data-material=vault] .section-tools .active { color: color-mix(in srgb, var(--hue-amber) 55%, var(--text)); }
+:root[data-material=vault] .card-location .folder-dot { background: var(--vault-folder-color, var(--green)); }
+:root[data-material=vault] .pinned-icon, :root[data-material=vault] .section-tools .active { color: var(--hue-amber); }
 
-:root[data-material=vault] .folder-glyph, :root[data-material=vault] .folders > .folder-tab > svg, :root[data-material=vault] .heading-glyph { color: color-mix(in srgb, var(--vault-folder-color, var(--section-hue)) var(--vault-folder-strength), var(--text)); }
+:root[data-material=vault] .folder-glyph, :root[data-material=vault] .folders > .folder-tab > svg, :root[data-material=vault] .heading-glyph { color: var(--vault-folder-color, var(--section-hue)); }
 
 /* Picker colours communicate the hue without turning the whole note into a swatch. */
 :root[data-material=vault][data-theme=dark] .swatch.color-sage { --swatch-hue: var(--hue-green); }

@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { stateSchema, noteSchema, createNoteSchema } from './schema.mjs';
+import { stateSchema, noteSchema, createNoteSchema, noteLabel } from './schema.mjs';
 import { descendantIds, folderTree, validateFolderTree } from './folders.mjs';
 import { orderNotes, withDividers } from './order.mjs';
 import { attachmentUrl, replaceAttachmentUrls } from './attachments.mjs';
@@ -69,7 +69,7 @@ export async function restoreNoteVersion(store, id, revision, expectedRevision) 
 export async function duplicateNote(store, id, source = 'You') {
   return store.mutate(state => {
     const original = store.find(state, id);
-    const note = { ...structuredClone(original), id: randomUUID(), title: `${original.title.slice(0, 193)} (copy)`, pinned: false, revision: 1, source, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const note = { ...structuredClone(original), id: randomUUID(), title: original.title ? `${original.title.slice(0, 193)} (copy)` : '', pinned: false, revision: 1, source, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     state.notes.push(note); state.noteOrder.unshift(note.id); store.event(state, 'duplicated', note, source); return note;
   });
 }
@@ -245,7 +245,7 @@ export async function exportMarkdown(store, destination, { noteId, folderId } = 
     const folder = state.folders.find(value => value.id === note.folderId);
     const directory = noteId ? output : path.join(output, directoryNames.get(note.folderId) || 'Inbox');
     await fs.mkdir(directory, { recursive: true });
-    let text = `# ${note.title.replace(/\n/g, ' ')}\n\n${note.body}\n`;
+    let text = note.title ? `# ${note.title.replace(/\n/g, ' ')}\n\n${note.body}\n` : `${note.body}\n`;
     if (note.attachments.length) {
       const assets = path.join(directory, 'attachments', note.id);
       await fs.mkdir(assets, { recursive: true });
@@ -261,7 +261,7 @@ export async function exportMarkdown(store, destination, { noteId, folderId } = 
       }
       text += `\n${links.join('\n\n')}\n`;
     }
-    await fs.writeFile(noteId ? destination : path.join(directory, `${safeName(note.title)}-${note.id.slice(0, 8)}.md`), text, { mode: 0o600 });
+    await fs.writeFile(noteId ? destination : path.join(directory, `${safeName(noteLabel(note))}-${note.id.slice(0, 8)}.md`), text, { mode: 0o600 });
   }
   return { count: notes.length, path: destination };
 }

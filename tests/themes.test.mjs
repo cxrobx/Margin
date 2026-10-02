@@ -43,14 +43,13 @@ test('vault connector accepts only loopback URLs and fixes the endpoint path', (
 
 test('existing notebooks gain Default without changing any notes or rewriting their file', async t => {
   const store = await fixture(t);
-  const old = await store.read(); delete old.themes; delete old.vaultTheme; delete old.settings.themeId; delete old.settings.vaultAddress; delete old.settings.glassTransparency; delete old.settings.themeSaturation;
+  const old = await store.read(); delete old.themes; delete old.vaultTheme; delete old.settings.themeId; delete old.settings.vaultAddress; delete old.settings.glassTransparency;
   const bytes = JSON.stringify(old); await fs.writeFile(store.file, bytes);
   const migrated = await (await new NoteStore(store.dir).init()).read();
   assert.deepEqual(migrated.notes, old.notes);
   assert.equal(migrated.settings.themeId, 'default');
   assert.equal(migrated.settings.theme, 'light');
   assert.equal(migrated.settings.glassTransparency, .38);
-  assert.equal(migrated.settings.themeSaturation, 1);
   assert.equal(await fs.readFile(store.file, 'utf8'), bytes, 'Reading an old notebook must not rewrite it');
   assert.deepEqual(resolveAppearance(migrated, false).tokens, DEFAULT_THEME.light);
   await store.setSettings({ theme: 'system' });
@@ -59,34 +58,16 @@ test('existing notebooks gain Default without changing any notes or rewriting th
   assert.equal(await fs.readFile(path.join(store.dir, 'backups', backup), 'utf8'), bytes);
 });
 
-test('saturation persists across themes without changing notes or captured palettes', async t => {
+test('notebooks that saved the retired saturation setting still open and save', async t => {
   const store = await fixture(t);
-  const address = (await store.read()).settings.vaultAddress;
-  await store.cacheVaultTheme(light, address);
-  const copy = await store.saveVaultTheme('Original colours');
-  const original = await store.read();
-  await store.setSettings({ themeSaturation: 2.5 });
-  for (const themeId of ['default', GLASS_THEME.id, MONOKAI_SODA_THEME.id, 'vault', copy.id]) {
-    await store.setSettings({ themeId });
-    const state = await (await new NoteStore(store.dir).init()).read();
-    assert.equal(state.settings.themeSaturation, 2.5);
-    for (const systemDark of [false, true]) {
-      const vivid = resolveAppearance(state, systemDark);
-      const baseline = resolveAppearance({ ...state, settings: { ...state.settings, themeSaturation: 1 } }, systemDark);
-      assert.notEqual(vivid.tokens.sage, baseline.tokens.sage);
-      assert.equal(vivid.mode, baseline.mode);
-      assert.equal(vivid.material, baseline.material);
-      if (vivid.glass) assert.deepEqual(vivid.glass, baseline.glass, 'Saturation keeps the glass transparency independent');
-    }
-    assert.deepEqual(state.notes, original.notes);
-    assert.deepEqual(state.themes, original.themes);
-    assert.deepEqual(state.vaultTheme, original.vaultTheme);
-  }
-  await store.setSettings({ themeSaturation: 0 });
-  assert.equal((await store.read()).settings.themeSaturation, 0);
-  for (const themeSaturation of [-.1, 3.1, NaN, Infinity, '2']) await assert.rejects(() => store.setSettings({ themeSaturation }));
-  await store.setSettings({ themeId: 'default', theme: 'light', themeSaturation: 1 });
-  assert.deepEqual(resolveAppearance(await store.read(), false).tokens, DEFAULT_THEME.light, 'Reset restores the exact original palette');
+  const old = await store.read(); old.settings.themeSaturation = 2.5;
+  await fs.writeFile(store.file, JSON.stringify(old));
+  const reopened = await new NoteStore(store.dir).init();
+  const state = await reopened.read();
+  assert.equal('themeSaturation' in state.settings, false);
+  assert.deepEqual(state.notes, old.notes);
+  await reopened.setSettings({ theme: 'dark' });
+  assert.equal('themeSaturation' in JSON.parse(await fs.readFile(store.file, 'utf8')).settings, false, 'The next save drops the retired key');
 });
 
 test('vault copies preserve captured palettes across edits, offline use, and restarts', async t => {
@@ -121,7 +102,7 @@ test('vault copies preserve captured palettes across edits, offline use, and res
   assert.equal((await store.read()).vaultTheme.palette, null, 'A response from an old connector must be discarded');
 });
 
-test('CXTasks Glass persists separately from vault copies and honours appearance and accessibility', async t => {
+test('Glass persists separately from vault copies and honours appearance and accessibility', async t => {
   const store = await fixture(t);
   const notes = (await store.read()).notes;
   await store.setSettings({ themeId: GLASS_THEME.id, theme: 'system', glassTransparency: .52 });
@@ -202,13 +183,19 @@ test('vault heading and folder colours survive saved copies, restarts and partia
   assert.equal((await store.read()).revision,revision, 'A partial outage must preserve captured colours without creating a backup');
   await store.cacheVaultTheme({...base,revision:'fedcba'},address);
   assert.equal((await store.read()).vaultTheme.palette.decoration,undefined, 'Changed base palettes must not carry stale snapshot colours');
-  for (const p of [light,palette]) {
-    const tokens=paletteTokens(p);
-    for (let i=1;i<=6;i++) {
-      const colour=tokens['heading-'+i].match(/\d+/g).map(Number);
-      for (const background of [p.bgPrimary,p.bgSidebar,p.bgSurface,p.bgElevated]) assert.ok(contrast(colour,background)>=4.5);
-    }
-  }
+});
+
+test('light vault colours are worn exactly as Obsidian renders them', () => {
+  // Solarized light, as Onyx measures it: these hues sit below 4.5:1 on cream.
+  const solarized = [[220,50,47],[203,75,22],[133,153,0],[42,161,152],[139,143,222],[108,113,196]];
+  const palette = { ...light, decoration: { headings: solarized, link: [203,75,22], folders: [{ name:'Meetings', color:[181,137,0] }] } };
+  const tokens = paletteTokens(palette);
+  solarized.forEach((c, i) => assert.equal(tokens['heading-'+(i+1)], `rgb(${c.join(' ')})`));
+  assert.equal(tokens['vault-link'], 'rgb(203 75 22)');
+  assert.equal(tokens['hue-amber'], 'rgb(181 137 0)');
+  const appearance = resolveAppearance({ settings: { theme:'light', themeId:'vault' }, vaultTheme: { palette }, themes: [] }, false);
+  assert.equal(appearance.folderColours[0].color, 'rgb(181 137 0)');
+  assert.ok(contrast([181,137,0], light.bgPrimary) < 4.5, 'The fixture would have been darkened by the old clamp');
 });
 
 test('Monokai Soda is a built-in dark preset that stays readable and persists', async t => {
@@ -229,8 +216,10 @@ test('Monokai Soda is a built-in dark preset that stays readable and persists', 
   for (const background of [p.bgPrimary, p.bgSidebar, p.bgSurface, p.bgElevated]) {
     assert.ok(contrast(p.ink, background) >= 7);
     assert.ok(contrast(p.muted, background) >= 4.5);
-    for (let i = 1; i <= 6; i++) assert.ok(contrast(rgbOf(tokens['heading-' + i]), background) >= 4.5);
+    // Headings are large text, so WCAG AA asks 3:1; they keep Monokai's own neon.
+    for (let i = 1; i <= 6; i++) assert.ok(contrast(rgbOf(tokens['heading-' + i]), background) >= 3);
   }
+  p.decoration.headings.forEach((c, i) => assert.equal(tokens['heading-' + (i + 1)], `rgb(${c.join(' ')})`));
   assert.ok(contrast(p.accent, rgbOf(tokens['button-ink'])) >= 4.5);
   await assert.rejects(() => store.deleteTheme(MONOKAI_SODA_THEME.id), /Only a saved/);
 });
