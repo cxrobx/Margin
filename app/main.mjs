@@ -18,6 +18,7 @@ import { MONOKAI_SODA_THEME } from '../shared/themes.mjs';
 import { noteLabel } from '../shared/schema.mjs';
 import { parseAppLink } from '../shared/app-links.mjs';
 import { createLinkOpener, installedLinkApps } from './document-links.mjs';
+import { createLaunchAtStartup } from './launch-at-startup.mjs';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 app.setName('Margin Notes');
@@ -35,6 +36,7 @@ let panelDisplayId, panelMotion, windowMaterial, appFocus, updater, panelReady =
 let edgeEnteredAt = null, lastHideAt = 0, quitRequested = false;
 const backupPlans = new Map();
 const linkLaunches = [];
+const launchAtStartup = createLaunchAtStartup({ app });
 const linkOpener = createLinkOpener({ openExternal: value => shell.openExternal(value), ...(process.env.MARGIN_LINK_SMOKE_TEST ? { launch: async (application, value) => { linkLaunches.push({ application, value }); } } : {}) });
 let pendingNoteLink = process.argv.find(value => value.startsWith('margin://note/'));
 async function openNoteLink(value) {
@@ -286,6 +288,7 @@ if (store && settings) {
   register('folders:create', (name, color, parentId) => store.createFolder(name, color, parentId ?? null));
   register('folders:rename', (id, name) => store.renameFolder(id, name));
   register('folders:update', (id, name, parentId) => store.updateFolder(id, { name, parentId }));
+  register('folders:move', (id, parentId, targetId, placement) => store.moveFolder(id, parentId, { targetId, placement }));
   register('dividers:create', (view, label, targetId, placement) => store.createDivider({ view, label, targetId, placement }));
   register('dividers:rename', (id, label) => store.renameDivider(id, label));
   register('dividers:delete', id => store.deleteDivider(id));
@@ -300,6 +303,8 @@ if (store && settings) {
     if (settings.themeId === 'vault') refreshVaultTheme().catch(console.error);
     return settings;
   });
+  register('startup:get', () => launchAtStartup.getStatus());
+  register('startup:set', enabled => launchAtStartup.setEnabled(enabled));
   register('themes:vault', refresh => refresh ? refreshVaultTheme() : vaultStatus);
   register('themes:save', (name, id) => store.saveVaultTheme(name, id));
   register('themes:delete', id => store.deleteTheme(id));
@@ -416,7 +421,7 @@ if (store && settings) {
   updater.start();
   if (process.env.MARGIN_SMOKE_TEST) console.log('Smoke: renderer loaded');
   if (process.env.MARGIN_SMOKE_TEST) {
-    const { runSmoke } = await import(process.env.MARGIN_IMAGE_SMOKE_TEST ? '../scripts/images-smoke.mjs' : process.env.MARGIN_LINK_SMOKE_TEST ? '../scripts/links-smoke.mjs' : process.env.MARGIN_FEATURE_SMOKE_TEST ? '../scripts/features-smoke.mjs' : process.env.MARGIN_FOLDERS_SMOKE_TEST ? '../scripts/folders-smoke.mjs' : '../scripts/smoke.mjs');
+    const { runSmoke } = await import(process.env.MARGIN_STARTUP_SMOKE_TEST ? '../scripts/startup-smoke.mjs' : process.env.MARGIN_IMAGE_SMOKE_TEST ? '../scripts/images-smoke.mjs' : process.env.MARGIN_LINK_SMOKE_TEST ? '../scripts/links-smoke.mjs' : process.env.MARGIN_FEATURE_SMOKE_TEST ? '../scripts/features-smoke.mjs' : process.env.MARGIN_FOLDERS_SMOKE_TEST ? '../scripts/folders-smoke.mjs' : '../scripts/smoke.mjs');
     try { await runSmoke(win, store, { edgeBars, show, hide, toggle, motion: panelMotion, material: windowMaterial, linkLaunches }); app.quit(); }
     catch (e) {
       console.error(e);

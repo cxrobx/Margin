@@ -229,7 +229,7 @@ export class NoteStore {
   async reorderTab(id, targetId, placement) {
     return this.mutate(state => {
       const source = state.folders.find(f => f.id === id), target = state.folders.find(f => f.id === targetId);
-      if ((source?.parentId ?? null) !== (target?.parentId ?? null)) throw new Error('Tabs can be reordered within their own row. To move a folder into another, rename it and choose where it sits.');
+      if ((source?.parentId ?? null) !== (target?.parentId ?? null)) throw new Error('Tabs can be reordered within their own row. Drag a folder onto another tab to move it.');
       state.tabOrder = moveItem(orderTabs(state.folders, state.tabOrder).map(tab => tab.id), id, targetId, placement);
       const positions = new Map(state.tabOrder.map((value, index) => [value, index]));
       state.folders.sort((a, b) => positions.get(a.id) - positions.get(b.id));
@@ -259,19 +259,36 @@ export class NoteStore {
   // Rename a folder and choose where it sits: null is the top level, and an
   // omitted parentId leaves it where it is.
   async updateFolder(id, { name, parentId } = {}) {
+    return this.mutate(state => this.changeFolder(state, id, { name, parentId }));
+  }
+  changeFolder(state, id, { name, parentId }) {
     if (parentId !== undefined && parentId !== null && typeof parentId !== 'string') throw new Error('Choose a folder to move this into.');
+    const folder = state.folders.find(f => f.id === id);
+    if (!folder || id === 'inbox') throw new Error('The Inbox cannot be renamed or moved.');
+    if (parentId === undefined) parentId = folder.parentId ?? null;
+    const cleanName = typeof name === 'string' ? name.trim() : '';
+    if (!cleanName || cleanName.length > 200) throw new Error('Enter a valid folder name.');
+    if (parentId !== (folder.parentId ?? null)) {
+      if (parentId !== null) this.folder(state, parentId);
+      if (!canPlace(state.folders, id, parentId)) throw new Error('A folder cannot go inside itself, and folders nest up to three levels deep.');
+    }
+    if (childrenOf(state.folders, parentId).some(f => f.id !== id && f.name.toLowerCase() === cleanName.toLowerCase())) throw new Error('A folder with that name already exists here.');
+    folder.name = cleanName; folder.parentId = parentId; return folder;
+  }
+  // Reparent and place beside a destination sibling in one locked write.
+  async moveFolder(id, parentId, { targetId = null, placement = 'after' } = {}) {
+    if (parentId === undefined) throw new Error('Choose a folder to move this into.');
     return this.mutate(state => {
-      const folder = state.folders.find(f => f.id === id);
-      if (!folder || id === 'inbox') throw new Error('The Inbox cannot be renamed or moved.');
-      if (parentId === undefined) parentId = folder.parentId ?? null;
-      const cleanName = typeof name === 'string' ? name.trim() : '';
-      if (!cleanName || cleanName.length > 200) throw new Error('Enter a valid folder name.');
-      if (parentId !== (folder.parentId ?? null)) {
-        if (parentId !== null) this.folder(state, parentId);
-        if (!canPlace(state.folders, id, parentId)) throw new Error('A folder cannot go inside itself, and folders nest up to three levels deep.');
+      const name = state.folders.find(folder => folder.id === id)?.name;
+      const folder = this.changeFolder(state, id, { name, parentId });
+      if (targetId !== null) {
+        const target = state.folders.find(value => value.id === targetId);
+        if (targetId === id || !(targetId === 'all' && parentId === null || target && (target.parentId ?? null) === parentId)) throw new Error('Choose a tab in the destination row.');
+        state.tabOrder = moveItem(orderTabs(state.folders, state.tabOrder).map(tab => tab.id), id, targetId, placement);
+        const positions = new Map(state.tabOrder.map((value, index) => [value, index]));
+        state.folders.sort((a, b) => positions.get(a.id) - positions.get(b.id));
       }
-      if (childrenOf(state.folders, parentId).some(f => f.id !== id && f.name.toLowerCase() === cleanName.toLowerCase())) throw new Error('A folder with that name already exists here.');
-      folder.name = cleanName; folder.parentId = parentId; return folder;
+      return folder;
     });
   }
   // A subfolder's notes, dividers and children move up into its parent. A

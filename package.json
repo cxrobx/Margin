@@ -63,6 +63,7 @@
       "dist/**",
       "assets/**",
       "scripts/smoke.mjs",
+      "scripts/startup-smoke.mjs",
       "scripts/rich-smoke.mjs",
       "scripts/images-smoke.mjs",
       "scripts/icons-smoke.mjs",

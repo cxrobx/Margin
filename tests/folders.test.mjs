@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { NoteStore } from '../shared/store.mjs';
-import { orderNotes, withDividers } from '../shared/order.mjs';
+import { orderNotes, orderTabs, withDividers } from '../shared/order.mjs';
 import { exportBackup, prepareBackup, applyBackup, exportMarkdown } from '../shared/notebook-features.mjs';
 import { folderLabel, folderTree, rememberSelection, resolveSelection, validateFolderTree } from '../shared/folders.mjs';
 
@@ -51,6 +51,54 @@ test('moving a folder never creates a loop or exceeds the depth cap', async t =>
   await assert.rejects(() => store.updateFolder('inbox', { name: 'Inbox', parentId: c.id }), /Inbox/);
   await assert.rejects(() => store.reorderTab(b.id, c.id, 'before'), /within their own row/);
   assert.throws(() => validateFolderTree([{ id: 'x', name: 'X', parentId: 'y' }, { id: 'y', name: 'Y', parentId: 'x' }]), /inside itself/);
+});
+
+test('drag moves preserve folder contents and atomically promote into a destination row', async t => {
+  const { dir, store } = await fixture(t);
+  const client = await store.createFolder('Client A', 'sky', 'work');
+  const drafts = await store.createFolder('Drafts', 'sand', client.id);
+  const sibling = await store.createFolder('Client B', 'rose', 'work');
+  await store.create({ title: 'Brief', body: 'Keep the full body', folderId: client.id });
+  await store.create({ title: 'Proposal', body: 'Draft text', folderId: drafts.id });
+  await store.createDivider({ view: client.id, label: 'Open' });
+  const original = await store.read();
+  await store.moveFolder(client.id, null);
+  assert.equal(folderLabel((await store.read()).folders, drafts.id), 'Client A / Drafts');
+  await store.moveFolder(client.id, 'personal');
+  assert.equal(folderLabel((await store.read()).folders, drafts.id), 'Personal / Client A / Drafts');
+  const before = await store.read();
+  await store.moveFolder(drafts.id, 'work', { targetId: sibling.id, placement: 'before' });
+  const after = await store.read();
+  assert.equal(after.revision, before.revision + 1, 'Reparenting and placement save together');
+  assert.deepEqual(orderTabs(after.folders.filter(folder => folder.parentId === 'work'), after.tabOrder).map(folder => folder.name), ['All', 'Drafts', 'Client B']);
+  assert.deepEqual(after.notes, original.notes, 'Moving folders never rewrites note contents, IDs, or revisions');
+  assert.deepEqual(after.dividers, original.dividers, 'Sections stay with the moved folder');
+  assert.deepEqual(after.noteOrder, original.noteOrder);
+  const reopened = await new NoteStore(dir).init();
+  assert.equal(folderLabel((await reopened.read()).folders, drafts.id), 'Work / Drafts');
+  await reopened.moveFolder(drafts.id, null, { targetId: 'all', placement: 'before' });
+  const top = orderTabs((await reopened.read()).folders.filter(folder => folder.parentId === null), (await reopened.read()).tabOrder);
+  assert.deepEqual(top.slice(0, 2).map(folder => folder.id), [drafts.id, 'all']);
+});
+
+test('invalid drag destinations leave the entire saved notebook unchanged', async t => {
+  const { dir, store } = await fixture(t);
+  const a = await store.createFolder('A', 'paper', 'work');
+  const child = await store.createFolder('Child', 'paper', a.id);
+  const b = await store.createFolder('B', 'paper', 'personal');
+  await store.createFolder('A', 'paper', 'personal');
+  const original = await fs.readFile(path.join(dir, 'notes.json'), 'utf8');
+  for (const [id, parentId, options] of [
+    [a.id, a.id], [a.id, child.id], [a.id, b.id], [a.id, 'personal'],
+    ['inbox', 'work'], [a.id, 'missing'], [a.id, undefined],
+    [child.id, null, { targetId: 'missing', placement: 'before' }],
+    [child.id, null, { targetId: b.id, placement: 'before' }],
+    [child.id, null, { targetId: 'work', placement: 'invalid' }],
+    [child.id, null, { targetId: child.id, placement: 'before' }]
+  ]) {
+    await assert.rejects(() => store.moveFolder(id, parentId, options));
+    assert.equal(await fs.readFile(path.join(dir, 'notes.json'), 'utf8'), original, 'An invalid move cannot partially reparent or reorder a folder');
+  }
 });
 
 test('removing a subfolder moves its notes, children and sections up into its parent', async t => {

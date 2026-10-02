@@ -8,11 +8,12 @@ import IconPicker from './IconPicker.jsx';
 import NodeIcon from './NodeIcon.jsx';
 import RichText from './RichText.jsx';
 import NoteCaret from './NoteCaret.jsx';
+import LaunchAtStartup from './LaunchAtStartup.jsx';
 import { useNoteResize, NoteResizeHandle } from './note-resize.jsx';
 import { NoteAutosave } from './note-autosave.mjs';
 import { imageAttachmentId, separateAttachments } from '../shared/attachments.mjs';
-import { Undo2, Redo2 } from 'lucide-react';
 import { noteLabel } from '../shared/schema.mjs';
+import { Undo2, Redo2 } from 'lucide-react';
 import { ArrowLeft, ArrowRight, Check, CheckSquare, ChevronDown, ChevronRight, Code2, Copy, Download, FileText, Folder, FolderPlus, GripVertical, Inbox, Link2, Minus, MoreHorizontal, Paperclip, Pin, Plus, Search, Settings, Sparkles, Trash2, X } from 'lucide-react';
 import './style.css';
 import './panel.css';
@@ -128,7 +129,7 @@ function NoteCard({ note, folder, edit, act, trashView, reorder, noteIds, folder
               <button onClick={() => { chooseIcon(note); setMenu(false); }}><Palette size={14} />Icon &amp; color…</button>
               <button onClick={() => { act(api.update(note.id, { pinned: !note.pinned })); setMenu(false); }}><Pin size={14} />{note.pinned ? 'Unpin' : 'Pin to top'}</button>
               <button onClick={() => { act(api.attach(note.id)); setMenu(false); }}><Paperclip size={14} />Attach a file</button>
-              <button onClick={() => { act(api.copy(`${note.title}\n\n${note.body}`), 'Copied note'); setMenu(false); }}><Copy size={14} />Copy note</button>
+              <button onClick={() => { act(api.copy(note.title ? `${note.title}\n\n${note.body}` : note.body), 'Copied note'); setMenu(false); }}><Copy size={14} />Copy note</button>
               <button onClick={async () => { const copy = await act(api.duplicate(note.id), 'Note duplicated'); setMenu(false); if (copy) edit(copy); }}><Copy size={14} />Duplicate note</button>
               <button onClick={() => { act(api.copyLink(note.id), 'Note link copied'); setMenu(false); }}><Link2 size={14} />Copy link to note</button>
               <button onClick={() => { showHistory(note); setMenu(false); }}><Undo2 size={14} />Note history…</button>
@@ -315,6 +316,7 @@ function Preferences({ state, hasCXTasks, close, act, showActivity, showThemes, 
   return <section className="overlay" role="dialog" aria-modal="true" aria-label="Preferences">
     <div className="overlay-top"><IconButton label="Back to notes" onClick={close}><ArrowLeft size={19} /></IconButton><span>Make it yours</span><span /></div>
     <div className="preferences-content"><h1>A little more<br />your style.</h1><div className="pref-group"><h3>Your workspace</h3>
+      <LaunchAtStartup api={api} />
       <label className="pref-row"><div><strong>Stay within reach</strong><small>Keep Margin above other windows</small></div><input type="checkbox" checked={state.settings.alwaysOnTop} onChange={e => setting({ alwaysOnTop: e.target.checked })} /></label>
       <label className="pref-row"><div><strong>Show screen-edge tab</strong><small>Turn off to use the shortcut or menu bar</small></div><input aria-label="Show screen-edge tab" type="checkbox" checked={state.settings.showEdgeTab} onChange={e => setting({ showEdgeTab: e.target.checked })} /></label>
       <label className="pref-row"><div><strong>Open from the edge</strong><small>Pause your pointer at the screen edge</small></div><input type="checkbox" checked={state.settings.hotEdge} onChange={e => setting({ hotEdge: e.target.checked })} /></label>
@@ -388,7 +390,8 @@ function App() {
   const searchRef = useRef(null);
   const reorder = useReorder(
     (kind, id, targetId, placement) => act(kind === 'note' ? api.reorderNote(id, targetId, placement) : api.reorderTab(id, targetId, placement)),
-    (id, folderId) => act(api.update(id, { folderId }), 'Note moved')
+    (id, folderId) => act(api.update(id, { folderId }), 'Note moved'),
+    { folders: state?.folders || [], moveFolder: (id, parentId, targetId, placement) => act(api.moveFolder(id, parentId, targetId, placement), 'Folder moved') }
   );
   const showToast = text => { setToast(text); };
   async function act(promise, success) {
@@ -399,6 +402,7 @@ function App() {
   const resetNotebook = expectedRevision => act(api.resetNotebook(expectedRevision), 'Notebook reset');
   // Each parent folder remembers the sub-tab chosen last, per notebook and across restarts.
   const memoryKey = state ? `margin-folder-memory:${state.notebookId}` : null;
+  const selectionPath = state ? folderPath(state.folders, filter).map(folder => folder.id).join('/') : '';
   useEffect(() => {
     if (!memoryKey) return;
     try { const saved = JSON.parse(localStorage.getItem(memoryKey) || '{}'); setFolderMemory(saved && typeof saved === 'object' ? saved : {}); }
@@ -411,7 +415,7 @@ function App() {
       if (next !== previous) try { localStorage.setItem(memoryKey, JSON.stringify(next)); } catch { /* Memory is a convenience. */ }
       return next;
     });
-  }, [filter, memoryKey]);
+  }, [filter, memoryKey, selectionPath]);
   const selectFolder = id => { setFilter(resolveSelection(folderMemory, state.folders, id)); setFolderMenu(false); };
   useEffect(() => {
     if (!state) return;
@@ -542,14 +546,14 @@ function App() {
     <header className="main-header"><div className="brand">Margin{state.demo && <span className="demo-badge">Demo</span>}</div><div className="panel-header-actions"><IconButton label="Focus search" onClick={() => searchRef.current?.focus()}><Search size={19} strokeWidth={1.7} /></IconButton><IconButton label="New note" onClick={addNote}><Plus size={22} strokeWidth={1.7} /></IconButton><IconButton label="Hide Margin" onClick={() => api.hide()}>{state.settings.edge === 'right' ? <ChevronRight size={18} /> : <ArrowLeft size={18} />}</IconButton></div></header>
     <div className="search-box"><Search size={16} strokeWidth={1.8} /><input ref={searchRef} aria-label="Search notes" placeholder="Find a thought…" value={query} onChange={e => { if (!query.trim() && e.target.value.trim()) setSearchScope('all'); setQuery(e.target.value); }} />{query ? <IconButton label="Clear search" onClick={() => setQuery('')}><X size={13} /></IconButton> : <kbd>⌘ F</kbd>}</div>
     {query.trim() && <div className="search-scope" role="group" aria-label="Search scope"><button aria-pressed={searchScope === 'all'} onClick={() => setSearchScope('all')}>{filter === 'trash' ? 'All Trash' : 'All notes'}</button><button aria-pressed={searchScope === 'section'} disabled={filter === 'all'} onClick={() => setSearchScope('section')}>{activeFolder ? `In ${activeFolder.name}` : 'This section'}</button></div>}
-    <nav className="folders" aria-label="Folders">{tabs.map(f => <button key={f.id} data-folder-id={f.id} style={folderTint(f)} className={`folder-tab hue-${f.id === 'all' ? 'teal' : f.id === 'inbox' ? 'blue' : folderHue(f.color)} ${topId === f.id ? 'selected' : ''} ${reorder.className('tab', f.id)}`} draggable title="Drag to reorder · Option ←/→" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
+    <nav className="folders" aria-label="Folders">{tabs.map(f => <button key={f.id} data-folder-id={f.id} style={folderTint(f)} className={`folder-tab hue-${f.id === 'all' ? 'teal' : f.id === 'inbox' ? 'blue' : folderHue(f.color)} ${topId === f.id ? 'selected' : ''} ${reorder.className('tab', f.id)}`} draggable title={f.id === 'all' ? 'Drop a subfolder here to make it top-level · Drag to reorder · Option ←/→' : 'Drop in the middle to move inside · Drop at an edge to place beside · Option ←/→'} aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
       onDragStart={e => reorder.start(e, 'tab', f.id)} onDragEnd={reorder.end} onDragOver={e => reorder.over(e, 'tab', f.id, 'x')} onDrop={e => reorder.drop(e, 'tab', f.id, 'x')} onDragLeave={e => reorder.leave(e, 'tab', f.id)} onKeyDown={e => reorder.keyboard(e, 'tab', f.id, tabs.map(tab => tab.id), 'x')}
       onContextMenu={e => { e.preventDefault(); chooseSectionIcon(f.id, f.id === 'all' ? 'All notes' : f.name, f.id === 'all' ? FileText : f.id === 'inbox' ? Inbox : Folder); }}
       onClick={() => selectFolder(f.id)}><NodeIcon icon={(f.id === 'all' ? state.sectionAppearances.all : f)?.icon} iconColor={(f.id === 'all' ? state.sectionAppearances.all : f)?.iconColor} fallback={f.id === 'all' ? FileText : f.id === 'inbox' ? Inbox : Folder} className="folder-glyph" size={14} />{f.name}</button>)}<IconButton label="New folder" onClick={() => setFolderDialog({})}><Plus size={15} /></IconButton></nav>
     {subRows.map(({ parent, selected, children }) => <nav key={parent.id} className="subfolders" aria-label={`Folders in ${parent.name}`} data-parent-id={parent.id}>
-      <button className={`subfolder-tab ${selected === parent.id ? 'selected' : ''} ${reorder.className('folder', parent.id)}`} data-subfolder-all={parent.id} aria-label={`All of ${parent.name}`} onClick={() => { setFilter(parent.id); setFolderMenu(false); }}
+      <button className={`subfolder-tab ${selected === parent.id ? 'selected' : ''} ${reorder.className('folder', parent.id)}`} data-subfolder-all={parent.id} aria-label={`All of ${parent.name}`} title={`Drop here to move into ${parent.name}`} onClick={() => { setFilter(parent.id); setFolderMenu(false); }}
         onDragOver={e => reorder.over(e, 'folder', parent.id, 'x')} onDrop={e => reorder.drop(e, 'folder', parent.id, 'x')} onDragLeave={e => reorder.leave(e, 'folder', parent.id)}>All</button>
-      {children.map(f => <button key={f.id} data-folder-id={f.id} style={folderTint(f)} className={`subfolder-tab hue-${folderHue(f.color)} ${selected === f.id ? 'selected' : ''} ${reorder.className('tab', f.id)}`} draggable title="Drag to reorder · Option ←/→" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
+      {children.map(f => <button key={f.id} data-folder-id={f.id} style={folderTint(f)} className={`subfolder-tab hue-${folderHue(f.color)} ${selected === f.id ? 'selected' : ''} ${reorder.className('tab', f.id)}`} draggable title="Drop in the middle to move inside · Drop at an edge to place beside · Option ←/→" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
         onDragStart={e => reorder.start(e, 'tab', f.id)} onDragEnd={reorder.end} onDragOver={e => reorder.over(e, 'tab', f.id, 'x')} onDrop={e => reorder.drop(e, 'tab', f.id, 'x')} onDragLeave={e => reorder.leave(e, 'tab', f.id)} onKeyDown={e => reorder.keyboard(e, 'tab', f.id, children.map(tab => tab.id), 'x')}
         onContextMenu={e => { e.preventDefault(); chooseSectionIcon(f.id, f.name, Folder); }}
         onClick={() => selectFolder(f.id)}><NodeIcon icon={f.icon} iconColor={f.iconColor} fallback={Folder} className="folder-glyph" size={12} />{f.name}</button>)}

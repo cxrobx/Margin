@@ -33,7 +33,7 @@ export async function runSmoke(win, store, panel) {
   const dragTarget = (selector, type, placement = 'before', axis = 'x') => run(`
     const target = document.querySelector(${JSON.stringify(selector)}), bounds = target.getBoundingClientRect();
     const event = new DragEvent(${JSON.stringify(type)}, { bubbles: true, cancelable: true, dataTransfer: window.folderDragTransfer,
-      clientX: bounds.left + bounds.width * ${axis === 'x' ? placement === 'before' ? .25 : .75 : .5},
+      clientX: bounds.left + bounds.width * ${axis === 'x' ? placement === 'before' ? .25 : placement === 'after' ? .75 : .5 : .5},
       clientY: bounds.top + bounds.height * ${axis === 'y' ? placement === 'before' ? .25 : .75 : .5} });
     target.dispatchEvent(event); event.defaultPrevented;
   `);
@@ -218,5 +218,79 @@ export async function runSmoke(win, store, panel) {
   assert.equal(state.notes.find(n => n.title === 'Client A brief').folderId, 'work');
   assert.equal(state.folders.find(f => f.id === drafts.id).parentId, 'work');
   assert.deepEqual(await rows(), [['*All', 'Client B', 'Drafts']], 'The lifted folder follows the manually ordered siblings');
+
+  // Folder drag gestures reparent, promote, position, and carry their whole subtree.
+  const folderParent = async id => (await store.read()).folders.find(folder => folder.id === id)?.parentId;
+  const moveFolder = async (id, parentId, selector, placement = 'inside') => {
+    await wait(`Boolean(document.querySelector('[data-folder-id="${id}"]'))`);
+    const before = await store.read();
+    await dragStart(`[data-folder-id="${id}"]`);
+    assert.equal(await dragTarget(selector, 'dragover', placement), true, 'The folder destination accepts the drag');
+    await wait(`document.querySelector(${JSON.stringify(selector)}).classList.contains('drop-${placement === 'inside' ? 'folder' : placement}')`);
+    if (id === clientB.id && parentId === 'personal') await screenshot('margin-folder-nesting-drag.png');
+    assert.equal(await dragTarget(selector, 'drop', placement), true);
+    await dragEnd();
+    for (let i = 0; i < 80 && await folderParent(id) !== parentId; i++) await new Promise(resolve => setTimeout(resolve, 100));
+    assert.equal(await folderParent(id), parentId, 'Folder moves persist through IPC');
+    const after = await store.read();
+    assert.equal(after.revision, before.revision + 1, 'A drag saves hierarchy and position in one mutation');
+    assert.deepEqual(after.notes, before.notes, 'The moved subtree keeps every note intact');
+    assert.deepEqual(after.dividers, before.dividers, 'The moved subtree keeps its sections');
+    assert.deepEqual(after.noteOrder, before.noteOrder);
+    await wait(`!document.querySelector('.drop-folder, .drop-before, .drop-after, .is-dragging')`);
+  };
+  await moveFolder(drafts.id, clientB.id, `[data-folder-id="${clientB.id}"]`);
+  await sub('Client B'); await view('Client B', ['Client B call', 'Draft proposal']);
+  await moveFolder(drafts.id, 'work', '[data-subfolder-all="work"]');
+  await view('Client B', ['Client B call']);
+  await moveFolder(drafts.id, null, '[data-folder-id="personal"]', 'before');
+  await wait(`Boolean(document.querySelector('.folders > [data-folder-id="${drafts.id}"]'))`);
+  const rootIds = await run(`Array.from(document.querySelectorAll('.folders > [data-folder-id]')).map(el => el.dataset.folderId)`);
+  assert.equal(rootIds[rootIds.indexOf(drafts.id) + 1], 'personal', 'An edge drop promotes beside the destination tab');
+  await moveFolder(drafts.id, clientB.id, `[data-folder-id="${clientB.id}"]`);
+  await sub('Drafts'); await view('Drafts', ['Draft proposal']);
+  await moveFolder(drafts.id, null, '[data-folder-id="all"]');
+  await view('Drafts', ['Draft proposal']);
+  await wait(`document.querySelector('.folders > .folder-tab.selected').dataset.folderId === '${drafts.id}'`);
+  await moveFolder(drafts.id, 'personal', '[data-folder-id="personal"]');
+  await view('Drafts', ['Draft proposal']);
+  await wait(`document.querySelector('.folders > .folder-tab.selected').dataset.folderId === 'personal'`);
+  await moveFolder(drafts.id, null, '[data-folder-id="inbox"]', 'after');
+  await wait(`Boolean(document.querySelector('.folders > [data-folder-id="${drafts.id}"]'))`);
+  await top('Work'); await subAll('work');
+  await moveFolder(drafts.id, clientB.id, `[data-folder-id="${clientB.id}"]`);
+  await sub('Client B'); await sub('Drafts'); await view('Drafts', ['Draft proposal']);
+  await moveFolder(clientB.id, 'personal', '[data-folder-id="personal"]');
+  await view('Drafts', ['Draft proposal']);
+  await wait(`document.querySelector('.folders > .folder-tab.selected').dataset.folderId === 'personal'`);
+  assert.equal((await store.read()).folders.find(folder => folder.id === drafts.id).parentId, clientB.id, 'Moving a parent carries its child folder');
+  const elsewhere = await store.createFolder('Elsewhere', 'paper', 'personal');
+  await store.createFolder('Drafts', 'paper', 'work');
+  await wait(`Boolean(document.querySelector('[data-folder-id="${elsewhere.id}"]'))`);
+  const rejectedRevision = (await store.read()).revision;
+  for (const [id, target] of [
+    [clientB.id, `[data-folder-id="${clientB.id}"]`],
+    [clientB.id, `[data-folder-id="${drafts.id}"]`],
+    [clientB.id, `[data-folder-id="${elsewhere.id}"]`],
+    ['personal', `[data-folder-id="${clientB.id}"]`],
+    [drafts.id, '[data-folder-id="work"]'],
+    [drafts.id, `[data-subfolder-all="${clientB.id}"]`]
+  ]) {
+    await dragStart(`[data-folder-id="${id}"]`);
+    assert.equal(await dragTarget(target, 'dragover', 'inside'), false, 'Cycles, excessive depth, duplicate names and no-op drops are rejected');
+    assert.equal(await dragTarget(target, 'drop', 'inside'), false);
+    await dragEnd();
+  }
+  assert.equal((await store.read()).revision, rejectedRevision, 'Rejected folder drops never save');
+  await dragStart(`[data-folder-id="${drafts.id}"]`);
+  await dragTarget('[data-folder-id="all"]', 'dragover', 'inside');
+  await wait(`document.querySelector('[data-folder-id="all"]').classList.contains('drop-folder')`);
+  await dragEnd();
+  assert.equal((await store.read()).revision, rejectedRevision, 'Canceling a folder promotion never saves');
+  win.webContents.reload(); await wait(`document.querySelectorAll('.folders > .folder-tab').length === 5`);
+  await top('Personal'); await view('Drafts', ['Draft proposal']);
+  assert.equal(await run(`document.querySelector('.folders > .folder-tab.selected').dataset.folderId`), 'personal', 'The new ancestry and remembered selection survive a reload');
+  await screenshot('margin-folder-moved-subtree.png');
+  console.log('Folder hierarchy drag smoke passed: nesting into another folder, promotion through an ancestor All tab, promotion beside a top-level tab, promotion through top All, moving a selected folder and its parent with intact notes/sections, cycle/depth/duplicate rejection, cancellation, and persisted ancestry and selection.');
   console.log('Folders smoke passed: note drag-and-drop into top-level folders, Inbox, both nested levels and the parent All tab; rejected and canceled drops; preserved note/tab order; note and top-level/subfolder tab reordering; sections cannot move into folders; three-level nesting with descendant notes, one sub-tab row per level, remembered sub-tabs (All or a child) across reloads, New folder inside, moving a folder, path labels in the editor, right-click sections placed at the pointer, naming, Escape, Option ↑, per-view sections hidden in search, removing a section, and removing a subfolder into its parent.');
 }
