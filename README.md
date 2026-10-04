@@ -6,6 +6,8 @@ A local macOS screen-edge notebook with Markdown, Alfred quick capture, and a bu
 
 Download the latest [Margin Notes release for Apple Silicon](https://github.com/cxrobx/Margin/releases/latest). Margin requires macOS 13 or newer. Open the disk image and drag **Margin Notes** to Applications, or unzip the app and move it there. No Node.js installation is needed to run the packaged app. The release also includes the optional Alfred 5 quick-capture workflow. The app and disk image are Developer ID signed and notarized by Apple, so they open without a warning. You can also [build from source](#develop-and-verify).
 
+Margin Notes is free. If it earns a place on your screen, you can [pay what you want](https://buy.stripe.com/cNieVd5BwbbK42x3M29sk01) to support its development.
+
 From 0.1.1, Margin Notes updates itself. It checks for a new release shortly after launch and once a day, asks before downloading one, and asks again before restarting. **Check for Updates…** in the menu bar icon's menu or the app menu checks right away. To stop the daily check, turn off **Preferences → Your workspace → Check for updates automatically**. Margin then makes no update requests on its own, and **Check for Updates…** still works. That daily check is the only network request Margin makes by itself; it sends no notes or other data. macOS installs an update only if it is signed with the same Developer ID as the running app. Version 0.1.0 has no updater, so install 0.1.1 or later by hand once.
 
 ## Use the app
