@@ -9,8 +9,10 @@
 #
 # Output: release/distribution/VERSION/ holding the disk image, the zip the
 # updater installs from, both blockmaps, latest-mac.yml, the Alfred workflow and
-# a .sha256 beside each download. release/build/VERSION/ keeps the raw build;
-# nothing is written to release/mac-arm64, which a locally running app may use.
+# a .sha256 beside each download. release/build/VERSION/ keeps the raw build,
+# minus the unpacked .app (the zip holds it): every .app left on disk shows up
+# in Spotlight and Alfred as another "Margin Notes". Nothing is written to
+# release/mac-arm64, which a locally running app may use.
 #
 # Needs: the Developer ID certificate in the login keychain and a notarytool
 # keychain profile (default DiskSight, same team). Override with CSC_NAME and
@@ -144,6 +146,9 @@ if [ "$SMOKE" = 1 ]; then
   MARGIN_SMOKE_TEST=1 MARGIN_DATA_DIR="$SMOKE_DATA" MARGIN_ARTIFACTS_DIR="$SMOKE_DATA" "$APP/Contents/MacOS/Margin Notes"
   rm -rf "$SMOKE_DATA"
 fi
+
+# The signed app lives on in the zip; an unpacked copy here is one more Spotlight hit.
+rm -rf "$OUT/mac-arm64"
 
 NOTES="${NOTES_FILE:-$DIST/release-notes.md}"
 FILES=("$DIST/$DMG" "$DIST/$DMG.sha256" "$DIST/$ZIP" "$DIST/$ZIP.sha256" "$DIST/$ZIP.blockmap" "$DIST/$DMG.blockmap" "$DIST/latest-mac.yml" "$DIST/Margin-Quick-Capture.alfredworkflow" "$DIST/Margin-Quick-Capture.alfredworkflow.sha256")
