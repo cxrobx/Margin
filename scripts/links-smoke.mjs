@@ -11,7 +11,7 @@ export async function runSmoke(win, store, panel) {
   const wait = async code => { for (let i = 0; i < 100; i++) { if (await run(code)) return; await new Promise(resolve => setTimeout(resolve, 100)); } throw new Error(`Timed out: ${code}`); };
   const click = label => run(`document.querySelector('[aria-label=${JSON.stringify(label)}]').click()`);
   const apps = await installedLinkApps();
-  assert.ok(apps.onyx && apps.obsidian && apps.cxtasks, 'Find the installed Onyx, Obsidian, and CXTasks bundles');
+  assert.ok(apps.onyx && apps.obsidian && apps.cxtasks && apps.cxboards, 'Find the installed Onyx, Obsidian, CXTasks, and CXBoards bundles');
   const document = path.join(store.dir, 'Design & café #2.md');
   await fs.writeFile(document, '# Linked document\n\nA local smoke-test note.');
   const href = fileLink(document);
@@ -20,7 +20,12 @@ export async function runSmoke(win, store, panel) {
   const tasks = new DatabaseSync(path.join(process.env.CXTASKS_DATA_DIR, 'cxtasks.db'));
   tasks.exec("CREATE TABLE tasks (id TEXT PRIMARY KEY, short_id INTEGER, title TEXT, status TEXT, deleted_at TEXT, archived_at TEXT); INSERT INTO tasks VALUES ('a', 42, 'Draw links as chips', 'in_progress', NULL, NULL), ('b', 9, 'Ship the release', 'done', NULL, NULL);");
   tasks.close();
-  const body = `${document}\n\nFollow T42 and task 86.\n\n42\n\nt42 and #42\n\n[Chosen document](${href})\n\n[Obsidian note](obsidian://open?path=${encodeURIComponent(document)})\n\n[Task link](cxtasks://task/T9)\n\n\`T100\`\n\n\`\`\`text\nT101\n${document}\n\`\`\`\n\n[Unsafe](javascript:alert(1))\n\n[Unsafe Obsidian](obsidian://new?vault=Notes&file=oops)\n\n[Old plan](${fileLink(path.join(store.dir, 'Gone.md'))})`;
+  // Board chips read CXBoards' database the same way; a fixture again.
+  process.env.CXBOARDS_HOME = path.join(store.dir, 'cxboards'); await fs.mkdir(process.env.CXBOARDS_HOME, { recursive: true });
+  const boards = new DatabaseSync(path.join(process.env.CXBOARDS_HOME, 'cxboards.db'));
+  boards.exec("CREATE TABLE boards (id TEXT PRIMARY KEY, title TEXT NOT NULL, is_folder INTEGER NOT NULL DEFAULT 0); CREATE TABLE trash (id TEXT PRIMARY KEY, board_id TEXT, kind TEXT NOT NULL, title TEXT NOT NULL, payload TEXT NOT NULL); INSERT INTO boards VALUES ('b_0000000001', 'Session plan', 0), ('b_0000000002', 'Reference moodboard', 0);");
+  boards.close();
+  const body = `${document}\n\nFollow T42 and task 86.\n\n42\n\nt42 and #42\n\n[Chosen document](${href})\n\n[Obsidian note](obsidian://open?path=${encodeURIComponent(document)})\n\n[Task link](cxtasks://task/T9)\n\n\`T100\`\n\n\`\`\`text\nT101\n${document}\n\`\`\`\n\n[Unsafe](javascript:alert(1))\n\n[Unsafe Obsidian](obsidian://new?vault=Notes&file=oops)\n\n[Old plan](${fileLink(path.join(store.dir, 'Gone.md'))})\n\ncxboards://b/b_0000000001\n\n[Moodboard](http://127.0.0.1:4870/b/b_0000000002)\n\nhttp://127.0.0.1:4870/b/b_0000000404`;
   const note = await store.create({ title: 'Notes, artifacts & tasks', body });
   panel.show();
   await wait(`document.querySelector('[data-note-id="${note.id}"] .note-body a[data-link-kind="document"]')`);
@@ -34,6 +39,13 @@ export async function runSmoke(win, store, panel) {
   assert.equal((await chip('[data-link-kind="document"]', 1)).label, 'Chosen document', 'A labelled link keeps its own label');
   const gone = await chip('[data-link-kind="document"]', 2);
   assert.deepEqual({ label: gone.label, state: gone.state }, { label: 'Old plan', state: 'missing' });
+  await wait(`document.querySelectorAll('[data-note-id="${note.id}"] a.link-chip[data-link-kind="board"]')[0]?.querySelector('.chip-label')?.textContent === 'Session plan'`);
+  const board = await chip('[data-link-kind="board"]');
+  assert.deepEqual({ label: board.label, icon: board.icon, state: board.state }, { label: 'Session plan', icon: 'data:image/png;base64,', state: undefined }, 'A bare board link shows the CXBoards icon and the board title, with no opt-in');
+  assert.match(board.title, /Open in CXBoards/);
+  assert.equal((await chip('[data-link-kind="board"]', 1)).label, 'Moodboard', 'A labelled board link keeps its label');
+  await wait(`document.querySelectorAll('[data-note-id="${note.id}"] a.link-chip[data-link-kind="board"]')[2]?.dataset.state === 'missing'`);
+  assert.deepEqual((await readLinks()).filter(link => link.kind === 'board').map(link => link.href), ['cxboards://b/b_0000000001', 'cxboards://b/b_0000000002', 'cxboards://b/b_0000000404'], 'The copied board address is stored as written and opens as cxboards://');
   assert.equal((await readLinks()).filter(link => link.kind === 'task').length, 0, 'Task links must be inactive by default');
   assert.equal((await run(`window.margin.openLink('T42')`)).ok, false, 'Native task opening also requires opt-in');
   await click('Preferences');
@@ -69,6 +81,10 @@ export async function runSmoke(win, store, panel) {
   await run(`document.querySelector('[data-note-id="${note.id}"] a[data-link-kind="task"]').click()`);
   for (let i = 0; panel.linkLaunches.at(-1)?.application !== apps.cxtasks && i < 80; i++) await new Promise(resolve => setTimeout(resolve, 50));
   assert.deepEqual(panel.linkLaunches.at(-1), { application: apps.cxtasks, value: 'cxtasks://task/T42' });
+  await run(`document.querySelector('[data-note-id="${note.id}"] a[data-link-kind="board"]').click()`);
+  for (let i = 0; panel.linkLaunches.at(-1)?.application !== apps.cxboards && i < 80; i++) await new Promise(resolve => setTimeout(resolve, 50));
+  assert.deepEqual(panel.linkLaunches.at(-1), { application: apps.cxboards, value: 'cxboards://b/b_0000000001' });
+  assert.equal((await run(`window.margin.openLink('cxboards://b/b_0000000001/delete')`)).ok, false);
   assert.equal((await run(`window.margin.openLink('cxtasks://run/T42')`)).ok, false);
   assert.equal((await run(`window.margin.openLink('obsidian://new?vault=Notes&file=oops')`)).ok, false);
   assert.equal((await run(`window.margin.openLink('file:///tmp/nonexistent-margin-note.md')`)).ok, false);
@@ -133,7 +149,8 @@ export async function runSmoke(win, store, panel) {
   await click('Back to notes');
   await wait(`!document.querySelector('[data-note-id="${note.id}"] .link-chip') && !document.querySelector('[data-note-id="${note.id}"] a[data-link-kind="task"]')`);
   assert.equal((await documentLinks()).filter(link => !link.chip && link.arrow).length, 3, 'Without either app, links read exactly as before');
+  assert.equal(await run(`document.querySelectorAll('[data-note-id="${note.id}"] a[data-link-kind="board"]:not(.link-chip)').length`), 3, 'Without CXBoards, board links are ordinary links');
   assert.match(await run(`document.querySelector('[data-note-id="${note.id}"] .note-body').textContent`), /Follow T42 and task 86\./, 'T42 stays plain text');
   await fs.writeFile(path.join(output, 'margin-links-without-apps.png'), (await win.webContents.capturePage()).toPNG());
-  console.log('Link smoke passed: installed-app detection, document and task chips (app icon, real title, own label, missing and done states, only with Onyx or CXTasks installed), plain file paths, named document links, Obsidian URIs, strict uppercase T-number references, default-off integration, installed-app-only preference, opt-in and opt-out, code exclusion, safe URL handling, app routing through IPC, both-app choices, editor document/task links, and saved Markdown.');
+  console.log('Link smoke passed: installed-app detection, document, task and board chips (app icon, real title, own label, missing and done states, only with Onyx, CXTasks or CXBoards installed), copied CXBoards addresses, plain file paths, named document links, Obsidian URIs, strict uppercase T-number references, default-off integration, installed-app-only preference, opt-in and opt-out, code exclusion, safe URL handling, app routing through IPC, both-app choices, editor document/task links, and saved Markdown.');
 }

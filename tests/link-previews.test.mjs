@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileLink } from '../shared/app-links.mjs';
-import { createLinkPreviews, documentTitle, readTask } from '../app/link-previews.mjs';
+import { createLinkPreviews, documentTitle, readBoard, readTask } from '../app/link-previews.mjs';
 
 test('document titles come from the HTML title, Markdown front matter or heading, then the filename', () => {
   assert.equal(documentTitle('/a/Publish, Don\'t Scroll.html', '<html><head>\n<title>\n  Publish, Don&#39;t Scroll </title>'), "Publish, Don't Scroll");
@@ -40,6 +40,40 @@ test('tasks are read from a read-only CXTasks database by T-number or id', async
   assert.equal(readTask('T404', database), null);
   assert.throws(() => readTask('T42', path.join(dir, 'missing.db')));
   assert.deepEqual(await fs.readFile(database), before, 'Looking up a task never writes to CXTasks');
+});
+
+test('boards are read from a read-only CXBoards database, including boards in its trash', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-cxboards-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const database = path.join(dir, 'cxboards.db');
+  const db = new DatabaseSync(database);
+  db.exec('CREATE TABLE boards (id TEXT PRIMARY KEY, title TEXT NOT NULL, is_folder INTEGER NOT NULL DEFAULT 0); CREATE TABLE trash (id TEXT PRIMARY KEY, board_id TEXT, kind TEXT NOT NULL, title TEXT NOT NULL, payload TEXT NOT NULL)');
+  db.prepare('INSERT INTO boards VALUES (?, ?, ?)').run('b_0000000001', '  Session   plan ', 0);
+  db.prepare('INSERT INTO boards VALUES (?, ?, ?)').run('b_0000000002', 'Kendrick', 1);
+  db.prepare('INSERT INTO trash VALUES (?, ?, ?, ?, ?)').run('t_0000000001', null, 'board', 'Old folder', JSON.stringify({ boards: [{ id: 'b_0000000003', title: 'Old folder' }, { id: 'b_0000000004', title: 'Nested idea' }] }));
+  db.prepare('INSERT INTO trash VALUES (?, ?, ?, ?, ?)').run('t_0000000002', 'b_0000000001', 'card', 'A card', JSON.stringify({ cards: [{ id: 'b_0000000005' }] }));
+  db.close();
+  const before = await fs.readFile(database);
+  assert.deepEqual(readBoard('b_0000000001', database), { title: 'Session plan', status: 'board' });
+  assert.deepEqual(readBoard('b_0000000002', database), { title: 'Kendrick', status: 'folder' });
+  assert.deepEqual(readBoard('b_0000000004', database), { title: 'Nested idea', status: 'trashed' });
+  assert.equal(readBoard('b_0000000005', database), null, 'Only trashed boards count, not cards');
+  assert.equal(readBoard('b_0000000404', database), null);
+  assert.throws(() => readBoard('b_0000000001', path.join(dir, 'missing.db')));
+  assert.deepEqual(await fs.readFile(database), before, 'Looking up a board never writes to CXBoards');
+});
+
+test('board previews need CXBoards and tell a missing board from an unreadable database', async () => {
+  const icon = async file => ({ isEmpty: () => false, toDataURL: () => `data:image/png;base64,${path.basename(file)}` });
+  let reads = 0;
+  const board = id => { reads++; if (id === 'b_0000000404') return null; if (id === 'b_0000000500') throw new Error('locked'); return { title: 'Session plan', status: 'board' }; };
+  const previews = createLinkPreviews({ fileIcon: icon, getApps: async () => ({ cxboards: '/Applications/CXBoards.app' }), board });
+  assert.deepEqual(await previews.preview('http://127.0.0.1:4870/b/b_0000000001'), { kind: 'board', app: 'cxboards', icon: 'data:image/png;base64,CXBoards.app', title: 'Session plan', status: 'board', missing: false });
+  assert.equal((await previews.preview('cxboards://b/b_0000000404')).missing, true);
+  assert.deepEqual(await previews.preview('cxboards://b/b_0000000500'), { kind: 'board', app: 'cxboards', icon: 'data:image/png;base64,CXBoards.app', title: null, status: null, missing: false }, 'An unreadable database is unknown, not missing');
+  reads = 0;
+  assert.equal(await createLinkPreviews({ fileIcon: icon, getApps: async () => ({ onyx: '/Applications/Onyx.app' }), board }).preview('cxboards://b/b_0000000001'), null);
+  assert.equal(reads, 0, 'Nothing is read without CXBoards');
 });
 
 test('previews pair the opening app icon with the target title, cache titles by file version, and never read tasks unless enabled', async () => {

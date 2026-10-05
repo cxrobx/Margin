@@ -1,6 +1,6 @@
 import { parseAppLink } from '../shared/app-links.mjs';
 
-const reference = /(?:["'](?:\/|~\/)[^\n]+?\.(?:md|markdown|html?|txt|pdf)["']|(?:file|obsidian|cxtasks|margin):\/\/[^\s<>]+|(?:\/|~\/)[^\s<>]+\.(?:md|markdown|html?|txt|pdf)|\bT[1-9]\d{0,14}\b)/gi;
+const reference = /(?:["'](?:\/|~\/)[^\n]+?\.(?:md|markdown|html?|txt|pdf)["']|(?:file|obsidian|cxtasks|cxboards|margin):\/\/[^\s<>]+|(?:\/|~\/)[^\s<>]+\.(?:md|markdown|html?|txt|pdf)|\bT[1-9]\d{0,14}\b)/gi;
 function target(value, cxtasksLinks) {
   try { const link = parseAppLink(value); return link.kind === 'web' || link.kind === 'task' && !cxtasksLinks ? null : link.href; } catch { return null; }
 }

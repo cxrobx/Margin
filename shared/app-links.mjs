@@ -3,6 +3,7 @@ import { noteIdFromLink } from './note-links.mjs';
 const documentExtension = /\.(?:md|markdown|html?|txt|pdf)$/i;
 const controls = /[\u0000-\u001f\u007f]/;
 const uuid = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
+const boardId = /^b_[a-f0-9]{1,32}$/;
 function clean(value) {
   if (typeof value !== 'string' || value.length > 8192 || controls.test(value)) throw new Error('Invalid link.');
   return value.trim().replace(/^(["'])(.*)\1$/, '$2');
@@ -21,6 +22,7 @@ export function taskLink(value) {
   if (!match) throw new Error('Use a task reference such as T42.');
   return `cxtasks://task/T${match[1]}`;
 }
+function boardLink(id) { return { kind: 'board', href: `cxboards://b/${id}`, id }; }
 // Only opening actions are accepted. A pasted URI cannot create/overwrite an
 // Obsidian note, run a CXTasks command, or launch an arbitrary local file.
 export function parseAppLink(value) {
@@ -45,6 +47,11 @@ export function parseAppLink(value) {
     const normalized = /^t/i.test(reference) ? 'T' + reference.slice(1) : reference;
     return { kind: 'task', href: `cxtasks://task/${normalized}`, reference: normalized };
   }
+  if (url.protocol === 'cxboards:') {
+    const id = url.pathname.slice(1).replace(/\/$/, '');
+    if (url.hostname !== 'b' || url.port || !boardId.test(id)) throw new Error('Invalid CXBoards board link.');
+    return boardLink(id);
+  }
   if (url.protocol === 'obsidian:') {
     if (url.hostname !== 'open' || !['', '/'].includes(url.pathname) || url.port || url.hash || [...url.searchParams.keys()].some(key => !['path', 'vault', 'file'].includes(key))) throw new Error('Only Obsidian open links are supported.');
     const path = url.searchParams.get('path');
@@ -60,6 +67,9 @@ export function parseAppLink(value) {
       const path = documentPath(url.searchParams.get('src'));
       return { kind: 'document', path, href: fileLink(path) };
     }
+    // CXBoards' "Copy link to board" gives its local server address.
+    const board = /^\/b\/([^/]+)\/?$/.exec(url.pathname);
+    if (['127.0.0.1', 'localhost'].includes(url.hostname) && url.port === '4870' && board && boardId.test(board[1])) return boardLink(board[1]);
     return { kind: 'web', href: text };
   }
   if (url.protocol === 'mailto:') return { kind: 'web', href: text };

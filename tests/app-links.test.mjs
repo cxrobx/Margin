@@ -31,6 +31,14 @@ test('only uppercase T-number references and explicit CXTasks links resolve to t
   const id = '12345678-1234-4234-9234-123456789012';
   assert.equal(parseAppLink('cxtasks://task/' + id).reference, id);
 });
+test('CXBoards board links and the copied board address open the same board', () => {
+  const href = 'cxboards://b/b_7060324397';
+  for (const value of [href, href + '/', 'http://127.0.0.1:4870/b/b_7060324397', 'http://localhost:4870/b/b_7060324397/']) assert.deepEqual(parseAppLink(value), { kind: 'board', href, id: 'b_7060324397' }, value);
+  assert.equal(editableLink('http://127.0.0.1:4870/b/b_7060324397'), href);
+  for (const value of ['http://127.0.0.1:4871/b/b_7060324397', 'http://127.0.0.1:4870/api/boards/b_7060324397', 'http://example.com:4870/b/b_7060324397']) assert.equal(parseAppLink(value).kind, 'web', value);
+  for (const value of ['cxboards://b/', 'cxboards://b/../etc', 'cxboards://board/b_7060324397', 'cxboards://b/b_70603/delete', 'cxboards://b:1/b_7060324397', 'cxboards://b/c_7060324397']) assert.throws(() => parseAppLink(value), value);
+  assert.deepEqual(referenceNodes('See cxboards://b/b_7060324397.').filter(node => node.tagName === 'a').map(node => node.properties.href), [href]);
+});
 test('local document links and app schemes reject remote files, executables, and mutation commands', () => {
   for (const value of ['file://server/Note.md', 'file:///tmp/app.command', '/tmp/app.sh', 'file:///tmp/note.md?run=true', 'file:///tmp/note.md#fragment', 'javascript:alert(1)', 'data:text/html,test', 'obsidian://new?vault=Notes&file=oops&content=changed', 'obsidian://open?path=/tmp/note.md&append=true', 'cxtasks://run/T42', 'cxtasks://task/T42/delete', 'https://user:password@example.com', '/tmp/evil\u0000.md']) {
     assert.throws(() => parseAppLink(value), value); assert.equal(safeAppHref(value), '', value);
@@ -54,15 +62,16 @@ test('reading links copied paths and task references without touching code or ne
 });
 test('native routing chooses Onyx, offers both apps, and explicitly opens Obsidian with an encoded path', async () => {
   const launches = []; const web = [];
-  const opener = createLinkOpener({ getApps: async () => ({ onyx: '/Applications/Onyx.app', obsidian: '/Applications/Obsidian.app', cxtasks: '/Applications/CXTasks.app' }), launch: async (...args) => launches.push(args), stat: async () => ({ isFile: () => true }), home: '/Users/me', openExternal: async url => web.push(url) });
+  const opener = createLinkOpener({ getApps: async () => ({ onyx: '/Applications/Onyx.app', obsidian: '/Applications/Obsidian.app', cxtasks: '/Applications/CXTasks.app', cxboards: '/Applications/CXBoards.app' }), launch: async (...args) => launches.push(args), stat: async () => ({ isFile: () => true }), home: '/Users/me', openExternal: async url => web.push(url) });
   assert.deepEqual((await opener.describe(file)).choices.map(choice => choice.id), ['onyx', 'obsidian']);
   await opener.open(file);
   await opener.open(fileLink(file), 'obsidian');
   await opener.open('~/Notes/Plan.md');
   await opener.open('T42');
   await opener.open('obsidian://open?vault=Notes&file=Plan');
+  await opener.open('http://127.0.0.1:4870/b/b_7060324397');
   await opener.open('https://example.com');
-  assert.deepEqual(launches, [['/Applications/Onyx.app', file], ['/Applications/Obsidian.app', 'obsidian://open?path=' + encodeURIComponent(file)], ['/Applications/Onyx.app', '/Users/me/Notes/Plan.md'], ['/Applications/CXTasks.app', 'cxtasks://task/T42'], ['/Applications/Obsidian.app', 'obsidian://open?vault=Notes&file=Plan']]);
+  assert.deepEqual(launches, [['/Applications/Onyx.app', file], ['/Applications/Obsidian.app', 'obsidian://open?path=' + encodeURIComponent(file)], ['/Applications/Onyx.app', '/Users/me/Notes/Plan.md'], ['/Applications/CXTasks.app', 'cxtasks://task/T42'], ['/Applications/Obsidian.app', 'obsidian://open?vault=Notes&file=Plan'], ['/Applications/CXBoards.app', 'cxboards://b/b_7060324397']]);
   assert.deepEqual(web, ['https://example.com']);
   await assert.rejects(opener.open(file, 'Terminal'), /Invalid document app/);
 });
@@ -73,6 +82,7 @@ test('native routing handles Obsidian fallback, missing apps, and stale file ref
   await opener.open(file); assert.equal(launches[0][0], '/Applications/Obsidian.app');
   assert.equal((await opener.describe(file)).defaultApp, 'obsidian');
   await assert.rejects(opener.open('T42'), /Install CXTasks/);
+  await assert.rejects(opener.open('cxboards://b/b_7060324397'), /Install CXBoards/);
   await assert.rejects(opener.open(file, 'onyx'), /Onyx is not installed/);
   await assert.rejects(createLinkOpener({ ...options, getApps: async () => ({}) }).open(file), /Install Onyx or Obsidian/);
   await assert.rejects(createLinkOpener({ ...options, stat: async () => { throw new Error('ENOENT'); } }).open(file), /moved/);

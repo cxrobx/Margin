@@ -342,7 +342,7 @@ if (store && settings) {
   });
   register('app:link-apps', async () => {
     const installed = await installedLinkApps({ refresh: true });
-    return { cxtasks: Boolean(installed.cxtasks), onyx: Boolean(installed.onyx) };
+    return { cxtasks: Boolean(installed.cxtasks), onyx: Boolean(installed.onyx), cxboards: Boolean(installed.cxboards) };
   });
   // Reading-only lookups; they change nothing, so skip re-reading the notebook.
   register('app:link-preview', value => linkPreviews.preview(value, { tasks: settings.cxtasksLinks }), { refresh: false });

@@ -42,10 +42,22 @@ export function readTask(reference, database = taskDatabase()) {
     return { reference: row.short_id == null ? reference : `T${row.short_id}`, title: tidy(String(row.title || '')) || null, status: row.deleted_at ? 'trashed' : row.archived_at ? 'archived' : row.status };
   } finally { db.close(); }
 }
+export const boardDatabase = () => path.join(process.env.CXBOARDS_HOME || path.join(os.homedir(), 'Library/Application Support/CXBoards'), 'cxboards.db');
+// Read-only too. A deleted board leaves `boards` for CXBoards' trash, inside the
+// trashed entry's payload. Returns null when neither holds it.
+export function readBoard(id, database = boardDatabase()) {
+  const db = new DatabaseSync(database, { readOnly: true, timeout: 1000 });
+  try {
+    const row = db.prepare('SELECT title, is_folder FROM boards WHERE id = ?').get(id);
+    if (row) return { title: tidy(String(row.title || '')) || null, status: row.is_folder ? 'folder' : 'board' };
+    const trashed = db.prepare("SELECT json_extract(b.value, '$.title') AS title FROM trash, json_each(trash.payload, '$.boards') AS b WHERE trash.kind = 'board' AND json_extract(b.value, '$.id') = ?").get(id);
+    return trashed ? { title: tidy(String(trashed.title || '')) || null, status: 'trashed' } : null;
+  } finally { db.close(); }
+}
 // What a reading-view chip shows for a link: the app that opens it, that app's
 // icon, and the target's own title. Nothing here opens or changes the target.
-// Chips belong to Onyx and CXTasks users only; without the app there is no preview.
-export function createLinkPreviews({ fileIcon, getApps = installedLinkApps, stat = fs.stat, read = readHead, task = readTask, home = os.homedir() }) {
+// Chips belong to Onyx, CXTasks and CXBoards users only; without the app there is no preview.
+export function createLinkPreviews({ fileIcon, getApps = installedLinkApps, stat = fs.stat, read = readHead, task = readTask, board = readBoard, home = os.homedir() }) {
   const icons = new Map(), titles = new Map();
   const icon = application => {
     if (!application) return null;
@@ -67,6 +79,11 @@ export function createLinkPreviews({ fileIcon, getApps = installedLinkApps, stat
       let found = null, known = true;
       try { found = task(link.reference); } catch { known = false; }
       return { kind: 'task', app: 'cxtasks', icon: await icon(apps.cxtasks), reference: found?.reference || link.reference, title: found?.title || null, status: found?.status || null, missing: known && !found };
+    }
+    if (link.kind === 'board' && apps.cxboards) {
+      let found = null, known = true;
+      try { found = board(link.id); } catch { known = false; }
+      return { kind: 'board', app: 'cxboards', icon: await icon(apps.cxboards), title: found?.title || null, status: found?.status || null, missing: known && !found };
     }
     return null;
   }
