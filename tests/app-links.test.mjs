@@ -125,3 +125,14 @@ test('automatic update checks default on, migrate, and persist when turned off',
   assert.equal((await new NoteStore(dir).read()).settings.autoUpdateCheck, false);
   await assert.rejects(reopened.setSettings({ autoUpdateCheck: 'no' }));
 });
+
+test('txt note links open the note in txt, and nothing else passes as one', async () => {
+  const href = 'txt://note/727aeffc-1a2f-4c91-b479-65256a2c1d6b';
+  for (const value of [href, href + '/', href.toUpperCase().replace('TXT://NOTE/', 'txt://note/')]) assert.deepEqual(parseAppLink(value), { kind: 'txt', href, id: '727aeffc-1a2f-4c91-b479-65256a2c1d6b' }, value);
+  for (const value of ['txt://new', 'txt://note/', 'txt://note/../etc', 'txt://note/727aeffc', 'txt://note/727aeffc-1a2f-4c91-b479-65256a2c1d6b?x=1', 'txt://notes/727aeffc-1a2f-4c91-b479-65256a2c1d6b']) assert.throws(() => parseAppLink(value), value);
+  assert.deepEqual(referenceNodes(`See ${href}.`).filter(node => node.tagName === 'a').map(node => node.properties.href), [href]);
+  const launches = [];
+  await createLinkOpener({ getApps: async () => ({ txt: '/Applications/txt.app' }), launch: async (...args) => launches.push(args) }).open(href);
+  assert.deepEqual(launches, [['/Applications/txt.app', href]]);
+  await assert.rejects(createLinkOpener({ getApps: async () => ({}), launch: async () => {} }).open(href), /Install txt/);
+});

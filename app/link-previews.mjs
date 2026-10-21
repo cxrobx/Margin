@@ -2,6 +2,8 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { parseAppLink } from '../shared/app-links.mjs';
 import { documentFile, installedLinkApps } from './document-links.mjs';
 
@@ -54,10 +56,24 @@ export function readBoard(id, database = boardDatabase()) {
     return trashed ? { title: tidy(String(trashed.title || '')) || null, status: 'trashed' } : null;
   } finally { db.close(); }
 }
+// txt keeps its own rules for ids and titles, so Margin asks txt instead of
+// re-implementing them: the bundled `txt-mcp resolve <id>` prints the note's
+// title and path, or exits 2 when no note has that id. It only reads.
+const run = promisify(execFile);
+export async function readTxtNote(id, application) {
+  try {
+    const { stdout } = await run(path.join(application, 'Contents/MacOS/txt-mcp'), ['resolve', id], { timeout: 5000 });
+    const note = JSON.parse(stdout);
+    return { title: tidy(String(note.title || '')) || null };
+  } catch (error) {
+    if (error.code === 2) return null;
+    throw error;
+  }
+}
 // What a reading-view chip shows for a link: the app that opens it, that app's
 // icon, and the target's own title. Nothing here opens or changes the target.
-// Chips belong to Onyx, CXTasks and CXBoards users only; without the app there is no preview.
-export function createLinkPreviews({ fileIcon, getApps = installedLinkApps, stat = fs.stat, read = readHead, task = readTask, board = readBoard, home = os.homedir() }) {
+// Chips belong to Onyx, CXTasks, CXBoards and txt users only; without the app there is no preview.
+export function createLinkPreviews({ fileIcon, getApps = installedLinkApps, stat = fs.stat, read = readHead, task = readTask, board = readBoard, txtNote = readTxtNote, home = os.homedir() }) {
   const icons = new Map(), titles = new Map();
   const icon = application => {
     if (!application) return null;
@@ -84,6 +100,11 @@ export function createLinkPreviews({ fileIcon, getApps = installedLinkApps, stat
       let found = null, known = true;
       try { found = board(link.id); } catch { known = false; }
       return { kind: 'board', app: 'cxboards', icon: await icon(apps.cxboards), title: found?.title || null, status: found?.status || null, missing: known && !found };
+    }
+    if (link.kind === 'txt' && apps.txt) {
+      let found = null, known = true;
+      try { found = await txtNote(link.id, apps.txt); } catch { known = false; }
+      return { kind: 'txt', app: 'txt', icon: await icon(apps.txt), title: found?.title || null, missing: known && !found };
     }
     return null;
   }

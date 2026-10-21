@@ -6,3 +6,5 @@ export const TaskLinksContext = createContext(false);
 export const DocumentChipsContext = createContext(false);
 // Board chips appear only when CXBoards is installed; no opt-in, like documents.
 export const BoardChipsContext = createContext(false);
+// txt note chips appear only when txt is installed, the same way.
+export const TxtChipsContext = createContext(false);

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileLink } from '../shared/app-links.mjs';
-import { createLinkPreviews, documentTitle, readBoard, readTask } from '../app/link-previews.mjs';
+import { createLinkPreviews, documentTitle, readBoard, readTask, readTxtNote } from '../app/link-previews.mjs';
 
 test('document titles come from the HTML title, Markdown front matter or heading, then the filename', () => {
   assert.equal(documentTitle('/a/Publish, Don\'t Scroll.html', '<html><head>\n<title>\n  Publish, Don&#39;t Scroll </title>'), "Publish, Don't Scroll");
@@ -118,4 +118,24 @@ test('without Onyx or CXTasks there are no previews and nothing is read', async 
   }
   for (const apps of [{}, { onyx: '/Applications/Onyx.app' }]) assert.equal(await createLinkPreviews({ ...options, getApps: async () => apps }).preview('T42', { tasks: true }), null, 'No task chip without CXTasks');
   assert.equal(looked, 0, 'Nothing is opened, read or queried for an app that is not installed');
+});
+
+test('txt note previews ask txt for the title and tell a missing note from an unreadable one', async () => {
+  const icon = application => ({ isEmpty: () => false, toDataURL: () => `data:image/png;base64,${path.basename(application)}` });
+  const txtNote = async id => { if (id === '00000000-0000-4000-8000-000000000404') return null; if (id === '00000000-0000-4000-8000-000000000500') throw new Error('locked'); return { title: 'Pipeline status update' }; };
+  const previews = createLinkPreviews({ fileIcon: icon, getApps: async () => ({ txt: '/Applications/txt.app' }), txtNote });
+  assert.deepEqual(await previews.preview('txt://note/727aeffc-1a2f-4c91-b479-65256a2c1d6b'), { kind: 'txt', app: 'txt', icon: 'data:image/png;base64,txt.app', title: 'Pipeline status update', missing: false });
+  assert.equal((await previews.preview('txt://note/00000000-0000-4000-8000-000000000404')).missing, true);
+  assert.equal((await previews.preview('txt://note/00000000-0000-4000-8000-000000000500')).missing, false, 'An unreadable lookup is unknown, not missing');
+  assert.equal(await createLinkPreviews({ fileIcon: icon, getApps: async () => ({}), txtNote }).preview('txt://note/727aeffc-1a2f-4c91-b479-65256a2c1d6b'), null);
+});
+
+test('readTxtNote runs the bundled txt-mcp resolve and reads exit 2 as missing', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-txt-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const bin = path.join(dir, 'txt.app/Contents/MacOS');
+  await fs.mkdir(bin, { recursive: true });
+  await fs.writeFile(path.join(bin, 'txt-mcp'), '#!/bin/sh\n[ "$1" = resolve ] || exit 9\n[ "$2" = known ] && echo \'{"id":"known","title":"  Grocery   run ","path":"/x"}\' && exit 0\nexit 2\n', { mode: 0o755 });
+  assert.deepEqual(await readTxtNote('known', path.join(dir, 'txt.app')), { title: 'Grocery run' });
+  assert.equal(await readTxtNote('gone', path.join(dir, 'txt.app')), null);
 });

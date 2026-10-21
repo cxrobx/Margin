@@ -10,7 +10,8 @@ const applications = {
   onyx: { name: 'Onyx', bundle: 'com.cx.onyx' },
   obsidian: { name: 'Obsidian', bundle: 'md.obsidian' },
   cxtasks: { name: 'CXTasks', bundle: 'com.cxtasks.app' },
-  cxboards: { name: 'CXBoards', bundle: 'com.cx.cxboards' }
+  cxboards: { name: 'CXBoards', bundle: 'com.cx.cxboards' },
+  txt: { name: 'txt', bundle: 'com.cx.txt' }
 };
 let cached, checkedAt = 0;
 export async function installedLinkApps({ refresh = false } = {}) {
@@ -44,8 +45,8 @@ export function createLinkOpener({ getApps = installedLinkApps, launch = (applic
     if (link.kind === 'web') return openExternal(link.href);
     if (link.kind === 'note') throw new Error('Margin note links are handled by the notebook.');
     const apps = await getApps();
-    if (['task', 'board', 'obsidian'].includes(link.kind)) {
-      const id = { task: 'cxtasks', board: 'cxboards', obsidian: 'obsidian' }[link.kind];
+    if (['task', 'board', 'txt', 'obsidian'].includes(link.kind)) {
+      const id = { task: 'cxtasks', board: 'cxboards', txt: 'txt', obsidian: 'obsidian' }[link.kind];
       if (!apps[id]) throw new Error(`Install ${applications[id].name} to open this link.`);
       return launch(apps[id], link.href);
     }

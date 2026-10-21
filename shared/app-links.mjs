@@ -52,6 +52,11 @@ export function parseAppLink(value) {
     if (url.hostname !== 'b' || url.port || !boardId.test(id)) throw new Error('Invalid CXBoards board link.');
     return boardLink(id);
   }
+  if (url.protocol === 'txt:') {
+    const id = url.pathname.slice(1).replace(/\/$/, '');
+    if (url.hostname !== 'note' || url.port || url.search || url.hash || !uuid.test(id)) throw new Error('Invalid txt note link.');
+    return { kind: 'txt', href: `txt://note/${id.toLowerCase()}`, id: id.toLowerCase() };
+  }
   if (url.protocol === 'obsidian:') {
     if (url.hostname !== 'open' || !['', '/'].includes(url.pathname) || url.port || url.hash || [...url.searchParams.keys()].some(key => !['path', 'vault', 'file'].includes(key))) throw new Error('Only Obsidian open links are supported.');
     const path = url.searchParams.get('path');

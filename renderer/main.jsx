@@ -33,11 +33,11 @@ import { NoteHistory, BackupTools } from './NotebookTools.jsx';
 import { rehypeSearch, searchParts, matchesNote } from './search.mjs';
 import { parseAppLink, safeAppHref } from '../shared/app-links.mjs';
 import { rehypeAppLinks } from './app-links.mjs';
-import { BoardChipsContext, DocumentChipsContext, TaskLinksContext } from './task-links-context.mjs';
+import { BoardChipsContext, DocumentChipsContext, TaskLinksContext, TxtChipsContext } from './task-links-context.mjs';
 import './notebook-tools.css';
 import './link-chip.css';
 
-const readingSchema = { ...defaultSchema, tagNames: [...defaultSchema.tagNames, 'u', 'mark'], protocols: { ...defaultSchema.protocols, src: [...defaultSchema.protocols.src, 'margin'], href: [...defaultSchema.protocols.href, 'margin', 'file', 'obsidian', 'cxtasks', 'cxboards'] } };
+const readingSchema = { ...defaultSchema, tagNames: [...defaultSchema.tagNames, 'u', 'mark'], protocols: { ...defaultSchema.protocols, src: [...defaultSchema.protocols.src, 'margin'], href: [...defaultSchema.protocols.href, 'margin', 'file', 'obsidian', 'cxtasks', 'cxboards', 'txt'] } };
 const api = window.margin;
 installPanelMotion(api);
 const colors = ['paper', 'sage', 'sand', 'rose', 'lavender', 'sky'];
@@ -57,6 +57,7 @@ function Markdown({ body, note, act, query = '' }) {
   const cxtasksLinks = React.useContext(TaskLinksContext);
   const documentChips = React.useContext(DocumentChipsContext);
   const boardChips = React.useContext(BoardChipsContext);
+  const txtChips = React.useContext(TxtChipsContext);
   return <ReactMarkdown urlTransform={(value, key) => key === 'src' && imageAttachmentId(value) ? value : safeAppHref(value)} remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, [rehypeSanitize, readingSchema], [rehypeAppLinks, { cxtasksLinks }], [rehypeSearch, { query }]]} components={{
     a: ({ node, href, children }) => {
       let link; try { link = parseAppLink(href); } catch {}
@@ -65,8 +66,8 @@ function Markdown({ body, note, act, query = '' }) {
       const onClick = e => { e.preventDefault(); e.stopPropagation(); act(api.openLink(href)); };
       const onContextMenu = kind === 'document' ? e => { e.preventDefault(); e.stopPropagation(); act(api.linkMenu(href)); } : undefined;
       // Task links exist only with CXTasks installed and enabled, so they are always chips.
-      if (kind === 'document' && documentChips || kind === 'board' && boardChips || kind === 'task') return <LinkChip link={link} label={children} bare={isBareReference(node, link)} query={query} onClick={onClick} onContextMenu={onContextMenu} />;
-      return <a href={href} data-link-kind={kind} title={kind === 'document' ? 'Open document · Right-click to choose Onyx or Obsidian' : kind === 'obsidian' ? 'Open in Obsidian' : kind === 'board' ? 'Open in CXBoards' : undefined} onClick={onClick} onContextMenu={onContextMenu}>{children}<ArrowRight size={12} /></a>;
+      if (kind === 'document' && documentChips || kind === 'board' && boardChips || kind === 'txt' && txtChips || kind === 'task') return <LinkChip link={link} label={children} bare={isBareReference(node, link)} query={query} onClick={onClick} onContextMenu={onContextMenu} />;
+      return <a href={href} data-link-kind={kind} title={kind === 'document' ? 'Open document · Right-click to choose Onyx or Obsidian' : kind === 'obsidian' ? 'Open in Obsidian' : kind === 'board' ? 'Open in CXBoards' : kind === 'txt' ? 'Open in txt' : undefined} onClick={onClick} onContextMenu={onContextMenu}>{children}<ArrowRight size={12} /></a>;
     },
     img: ({ src, alt }) => imageAttachmentId(src)
       ? <button className="note-image-button" title={`Open ${alt || 'image'}`} onClick={e => { e.stopPropagation(); act(api.openAttachment(imageAttachmentId(src))); }}><img className="note-inline-image" src={src} alt={alt || 'Pasted image'} /></button>
@@ -369,7 +370,7 @@ function FolderDialog({ initial, parentId: initialParent = null, folders, close,
 
 function App() {
   const [state, setState] = useState(null);
-  const [linkApps, setLinkApps] = useState({ cxtasks: false, onyx: false, cxboards: false });
+  const [linkApps, setLinkApps] = useState({ cxtasks: false, onyx: false, cxboards: false, txt: false });
   const [reducedTransparency, setReducedTransparency] = useState(false);
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
@@ -377,7 +378,7 @@ function App() {
   const [historyNote, setHistoryNote] = useState(null);
   const [pendingOpen, setPendingOpen] = useState(null);
   const [overlay, setOverlay] = useState(null);
-  const refreshLinkApps = React.useCallback(() => api.linkApps().then(result => { if (result.ok) setLinkApps(result.value); }).catch(() => setLinkApps({ cxtasks: false, onyx: false, cxboards: false })), []);
+  const refreshLinkApps = React.useCallback(() => api.linkApps().then(result => { if (result.ok) setLinkApps(result.value); }).catch(() => setLinkApps({ cxtasks: false, onyx: false, cxboards: false, txt: false })), []);
   useEffect(() => {
     refreshLinkApps();
     window.addEventListener('focus', refreshLinkApps);
@@ -552,7 +553,7 @@ function App() {
   const headingHue = query ? 'blue' : activeFolder ? (activeFolder.id === 'inbox' ? 'blue' : folderHue(activeFolder.color)) : ({ all: 'teal', pinned: 'amber', trash: 'red' })[filter];
   const sectionAppearance = activeFolder || state.sectionAppearances[filter] || {};
   const HeadingIcon = query ? Search : activeFolder ? (activeFolder.id === 'inbox' ? Inbox : Folder) : ({ all: FileText, pinned: Pin, trash: Trash2 })[filter] || FileText;
-  return <TaskLinksContext.Provider value={Boolean(state.settings.cxtasksLinks && linkApps.cxtasks)}><DocumentChipsContext.Provider value={Boolean(linkApps.onyx)}><BoardChipsContext.Provider value={Boolean(linkApps.cxboards)}><main className="app-shell">
+  return <TaskLinksContext.Provider value={Boolean(state.settings.cxtasksLinks && linkApps.cxtasks)}><DocumentChipsContext.Provider value={Boolean(linkApps.onyx)}><BoardChipsContext.Provider value={Boolean(linkApps.cxboards)}><TxtChipsContext.Provider value={Boolean(linkApps.txt)}><main className="app-shell">
     <div className="panel-chrome">
     <header className="main-header"><div className="search-box"><Search size={16} strokeWidth={1.8} /><input ref={searchRef} aria-label="Search notes" placeholder="Find a thought…" value={query} onChange={e => { if (!query.trim() && e.target.value.trim()) setSearchScope('all'); setQuery(e.target.value); }} />{query ? <IconButton label="Clear search" onClick={() => setQuery('')}><X size={13} /></IconButton> : <kbd>⌘ F</kbd>}</div><div className="panel-header-actions"><IconButton label="New note" onClick={addNote}><Plus size={22} strokeWidth={1.7} /></IconButton><IconButton label="Hide Margin" onClick={() => api.hide()}>{state.settings.edge === 'right' ? <ChevronRight size={18} /> : <ArrowLeft size={18} />}</IconButton></div></header>
     {query.trim() && <div className="search-scope" role="group" aria-label="Search scope"><button aria-pressed={searchScope === 'all'} onClick={() => setSearchScope('all')}>{filter === 'trash' ? 'All Trash' : 'All notes'}</button><button aria-pressed={searchScope === 'section'} disabled={filter === 'all'} onClick={() => setSearchScope('section')}>{activeFolder ? `In ${activeFolder.name}` : 'This section'}</button></div>}
@@ -592,7 +593,7 @@ function App() {
     {paneMenu && <ContextMenu menu={paneMenu} close={() => setPaneMenu(null)} />}
     {iconTarget && <IconPicker key={`${iconTarget.kind}:${iconTarget.id || 'draft'}`} target={iconTarget} close={() => setIconTarget(null)} api={api} />}
     {toast && <div className="toast" role="status"><Check size={14} /><span>{toast}</span><IconButton label="Dismiss message" onClick={() => setToast('')}><X size={13} /></IconButton></div>}
-  </main></BoardChipsContext.Provider></DocumentChipsContext.Provider></TaskLinksContext.Provider>;
+  </main></TxtChipsContext.Provider></BoardChipsContext.Provider></DocumentChipsContext.Provider></TaskLinksContext.Provider>;
 }
 
 createRoot(document.getElementById('root')).render(<App />);

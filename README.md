@@ -50,6 +50,8 @@ With Onyx installed, document links in the reading view appear as chips, like sm
 
 With CXBoards installed, a board link appears as a chip with CXBoards' icon and the board's title, read from CXBoards' local database without changing it. Right-click a board in CXBoards' sidebar and choose **Copy link** (or use **Board → Copy link to board**), then paste the `cxboards://b/<board id>` link into a note. Its local address, `http://127.0.0.1:4870/b/<board id>`, works too. Either one opens the board in CXBoards. There's nothing to turn on. A board in CXBoards' Trash is faded, and one that no longer exists is dashed. Without CXBoards, board links are ordinary links.
 
+With [txt](https://github.com/cxrobx/txt) installed, a `txt://note/<id>` link appears as a chip with txt's icon and the note's title, which Margin gets by asking txt (`txt-mcp resolve`, read-only). Copy a note's link in txt with **File → Copy Link** (⇧⌘C) and paste it into a note; it opens the note in txt. A note that no longer exists is dashed. Without txt, these are ordinary links.
+
 References point to the original document or task. They are recognized when rendering, so Margin does not copy the file or rewrite the stored note. Missing files and uninstalled apps show a useful error.
 
 ## Demo mode and an empty notebook
