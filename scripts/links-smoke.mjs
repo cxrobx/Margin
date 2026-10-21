@@ -165,6 +165,8 @@ export async function runSmoke(win, store, panel) {
   await wait(`!document.querySelector('[data-note-id="${note.id}"] .link-chip') && !document.querySelector('[data-note-id="${note.id}"] a[data-link-kind="task"]')`);
   assert.equal((await documentLinks()).filter(link => !link.chip && link.arrow).length, 3, 'Without either app, links read exactly as before');
   assert.equal(await run(`document.querySelectorAll('[data-note-id="${note.id}"] a[data-link-kind="board"]:not(.link-chip)').length`), 3, 'Without CXBoards, board links are ordinary links');
+  assert.equal(await run(`document.querySelectorAll('[data-note-id="${note.id}"] a[data-link-kind="txt"]:not(.link-chip)').length`), 3, 'Without txt, txt note links are ordinary links');
+  assert.equal(await run(`document.querySelectorAll('[data-note-id="${note.id}"] a.link-chip[data-link-kind="txt"]').length`), 0, 'and no chip asks txt for anything');
   assert.match(await run(`document.querySelector('[data-note-id="${note.id}"] .note-body').textContent`), /Follow T42 and task 86\./, 'T42 stays plain text');
   await fs.writeFile(path.join(output, 'margin-links-without-apps.png'), (await win.webContents.capturePage()).toPNG());
   console.log('Link smoke passed: installed-app detection, document, task, board and txt note chips (app icon, real title, own label, missing and done states, only with Onyx, CXTasks or CXBoards installed), copied CXBoards addresses, plain file paths, named document links, Obsidian URIs, strict uppercase T-number references, default-off integration, installed-app-only preference, opt-in and opt-out, code exclusion, safe URL handling, app routing through IPC, both-app choices, editor document/task links, and saved Markdown.');
