@@ -173,7 +173,7 @@ Use a fresh directory for each smoke run. Screenshots are written to `artifacts/
 
 Add `MARGIN_STARTUP_SMOKE_TEST=1` to the desktop smoke command to check the startup toggle, persistence across renderer reloads, System Settings changes, macOS approval, and registration errors. This test uses a simulated login service and never registers the test app as a login item.
 
-To release, bump `version` in `package.json`, commit, and run `npm run release -- X.Y.Z` from a clean tree. It builds the disk image and zip, signs, notarizes and staples both, writes `latest-mac.yml`, verifies the result, and prints the `gh release create` commands; it publishes only with `--publish`. After a release, `npm run verify:update-feed` checks the live update feed the way an installed copy reads it.
+To release, bump `version` in `package.json`, commit, and run `npm run release -- X.Y.Z` from a clean tree. It builds the disk image and zip, signs, notarizes and staples both, writes `latest-mac.yml`, verifies the result, and prints the `gh release create` commands; it publishes only with `--publish`. After a release, `npm run verify:update-feed` checks the live update feed the way an installed copy reads it. The script never installs anything: to install a release by hand, quit Margin Notes, delete `/Applications/Margin Notes.app`, and copy the new app in (unzip the release zip with `ditto -x -k`) rather than overwriting files inside the old bundle. On a Mac where a LaunchAgent runs the shared HTTP server from the installed app (label `com.cx.mcp.margin` on the Mac mini), restart it after installing so it loads the new code: `launchctl print gui/$(id -u)/com.cx.mcp.margin >/dev/null 2>&1 && launchctl kickstart -k gui/$(id -u)/com.cx.mcp.margin`.
 
 ## License
 
