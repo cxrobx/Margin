@@ -121,6 +121,8 @@ Connection references: [official Codex MCP documentation](https://developers.ope
 
 Resources expose `margin://folders` and `margin://notes/{id}`. Communication uses standard **stdio MCP**; no public listener, login, cloud account, or API key is needed. The MCP client's own approval settings govern assistant access. A connected assistant can read this notebook and write to it.
 
+**Shared HTTP mode (opt-in).** Start the server with `--http 18705` (or set `MARGIN_MCP_HTTP_PORT=18705`) to serve streamable-HTTP MCP at `http://127.0.0.1:18705/mcp` instead of stdio, so one long-lived process can serve every assistant session. It listens on 127.0.0.1 only and rejects any `Host` or `Origin` that is not `127.0.0.1` or `localhost` on that port. Each session gets its own MCP server instance; all of them share the notebook, and writes queue in the process before taking the same cross-process file lock the app uses. Sessions end on `DELETE` or after 24 hours idle. Connect with, for example, `claude mcp add --transport http --scope user margin http://127.0.0.1:18705/mcp`. Without the flag the server uses stdio exactly as before.
+
 ## Data and backups
 
 The packaged app stores data in `~/Library/Application Support/Margin Notes/`. Development mode uses `.margin-data/` in this repository. Set `MARGIN_DATA_DIR` to an absolute path to override either. Use the same path for the app and MCP clients. The app's connection screen does this automatically; a bare `npm run mcp` uses the standard user data directory unless the environment variable is set.

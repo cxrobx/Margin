@@ -60,9 +60,16 @@ export class NoteStore {
     });
     return this;
   }
+  // Writers in this process queue for the turn; the file lock then serializes
+  // processes. Without the queue, many MCP sessions in one HTTP server would
+  // race for the lock with retries and could time out under load.
   async withLock(fn) {
-    const release = await lockfile.lock(this.file, { realpath: false, stale: 15000, update: 3000, retries: { retries: 40, minTimeout: 25, maxTimeout: 250, randomize: true } });
-    try { return await fn(); } finally { await release(); }
+    const turn = (this.lockQueue ?? Promise.resolve()).then(async () => {
+      const release = await lockfile.lock(this.file, { realpath: false, stale: 15000, update: 3000, retries: { retries: 40, minTimeout: 25, maxTimeout: 250, randomize: true } });
+      try { return await fn(); } finally { await release(); }
+    });
+    this.lockQueue = turn.catch(() => {});
+    return turn;
   }
   async read() {
     const text = await fs.readFile(this.file, 'utf8');

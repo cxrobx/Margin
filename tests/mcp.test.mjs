@@ -67,3 +67,32 @@ test('connection commands quote paths and Claude environment flags precede trans
   assert.match(info.claude, /--env .* --transport stdio --scope user margin --/);
   assert.match(info.codex, /'\\''/);
 });
+test('HTTP mode serves separate sessions from one process, rejects foreign hosts, and keeps concurrent writes', async t => {
+  const { spawn } = await import('node:child_process');
+  const http = await import('node:http');
+  const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/sdk/client/streamableHttp.js');
+  const dir = await fs.mkdtemp(path.join(tmpdir(), 'margin-mcp-http-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const port = 20000 + Math.floor(Math.random() * 20000);
+  const child = spawn(process.execPath, [fileURLToPath(new URL('../server/index.mjs', import.meta.url)), '--http', String(port)], { env: { ...process.env, MARGIN_DATA_DIR: dir }, stdio: ['ignore', 'ignore', 'pipe'] });
+  t.after(() => child.kill());
+  await new Promise((resolve, reject) => {
+    let log = ''; child.stderr.on('data', d => { log += d; if (log.includes('listening on')) resolve(); });
+    child.once('exit', code => reject(new Error(`server exited ${code}: ${log}`)));
+  });
+  const url = new URL(`http://127.0.0.1:${port}/mcp`);
+  const connect = async name => { const client = new Client({ name, version: '1.0.0' }); await client.connect(new StreamableHTTPClientTransport(url)); t.after(() => client.close()); return client; };
+  const [a, b] = await Promise.all([connect('a'), connect('b')]);
+  assert.equal((await a.listTools()).tools.length, 17);
+  const call = async (client, name, args) => { const result = await client.callTool({ name, arguments: args }); assert.ok(!result.isError, result.content?.[0]?.text); return JSON.parse(result.content[0].text); };
+  const made = await Promise.all(Array.from({ length: 10 }, (_, i) => call(i % 2 ? a : b, 'create_note', { title: `Concurrent ${i}`, source: i % 2 ? 'Codex' : 'Claude' })));
+  assert.equal(new Set(made.map(n => n.id)).size, 10);
+  assert.equal((await call(b, 'list_notes', { query: 'Concurrent' })).total, 10);
+  const status = headers => new Promise((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port, path: '/mcp', method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...headers } }, res => { res.resume(); resolve(res.statusCode); });
+    req.on('error', reject); req.end(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'x', version: '1' } } }));
+  });
+  assert.equal(await status({ host: `evil.example:${port}` }), 403);
+  assert.equal(await status({ origin: 'http://evil.example' }), 403);
+  assert.equal(await status({ 'mcp-session-id': '00000000-0000-4000-8000-000000000000' }), 404);
+});
