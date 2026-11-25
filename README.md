@@ -2,6 +2,10 @@
 
 A local macOS screen-edge notebook with Markdown, Alfred quick capture, and a built-in MCP server for coding assistants.
 
+![Margin Notes sliding in from the screen edge while Claude writes notes over MCP — app replica, seeded demo data](docs/media/margin-demo.gif)
+
+<sub>App replica with seeded demo data. [Watch the full 28-second overview with sound](https://cxventures.io/products/margin).</sub>
+
 ## Download
 
 Download the latest [Margin Notes release for Apple Silicon](https://github.com/cxrobx/Margin/releases/latest). Margin requires macOS 13 or newer. Open the disk image and drag **Margin Notes** to Applications, or unzip the app and move it there. No Node.js installation is needed to run the packaged app. The release also includes the optional Alfred 5 quick-capture workflow. The app and disk image are Developer ID signed and notarized by Apple, so they open without a warning. You can also [build from source](#develop-and-verify).
